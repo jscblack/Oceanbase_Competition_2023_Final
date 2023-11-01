@@ -1,0 +1,1 @@
+./tools/deploy/obd.sh stop

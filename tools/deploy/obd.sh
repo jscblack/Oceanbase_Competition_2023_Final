@@ -560,6 +560,7 @@ Usage: $entrance <command> [options]
 Available commands:
 
 prepare  [-p DATA_PATH -h HOST]          Prepare for deployment.
+prepare_debug  [-p DATA_PATH -h HOST]    Prepare for deployment (target for gdb).
 deploy -c YAML_CONF [-n DEPLOY_NAME]     Deploy a cluster by a deploy yaml file. Default deploy name will be the name of yaml file.
 redeploy [-c YAML_CONF -n DEPLOY_NAME]   Redeploy cluster. 
 reinstall [-n DEPLOY_NAME]               Reinstall cluster. (Change bin file, sync libs and restart)
@@ -673,7 +674,11 @@ function main() {
     help_info
     ;;
     prepare)
-    [[ "$SKIP_COPY" == "" ]] && copy_sh
+    [[ "$SKIP_COPY" == "" ]] && sh copy.sh /root/workspace/oceanbase/tools/deploy/../../build_release
+    generate_config
+    ;;
+    prepare_debug)
+    [[ "$SKIP_COPY" == "" ]] && sh copy.sh /root/workspace/oceanbase/tools/deploy/../../build_debug
     generate_config
     ;;
     deploy)

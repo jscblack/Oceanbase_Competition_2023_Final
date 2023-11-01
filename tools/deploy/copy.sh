@@ -9,6 +9,8 @@ else
   SOURCE_DIR=$PWD/../../
 fi
 
+echo "BUILD_DIR: $BUILD_DIR"
+
 BIN_DIR=`pwd`/bin${VER}
 LIB_DIR=`pwd`/lib
 TOOL_DIR=`pwd`/tools
