@@ -27,17 +27,23 @@ fi
 
 # 检查参数个数
 if [ $# -lt 1 ] || [ $# -gt 2 ]; then
-    echo "Usage: $0 <pid> [duration]"
+    echo "Usage: $0 <pid|exec_file_path> [duration]"
     exit 1
 fi
 
-pid="$1"
+first_arg="$1"
 duration="$2"
 timestamp=$(date +"%Y%m%d%H%M%S")  # 获取当前时间戳
 
-# 检查PID是否为数字
-if ! [[ $pid =~ ^[0-9]+$ ]]; then
-    echo "Error: PID must be a valid number."
+# 判断第一个参数是PID还是可执行文件路径
+if [[ $first_arg =~ ^[0-9]+$ ]]; then
+    pid=$first_arg
+    mode="pid"
+elif [ -f "$first_arg" ]; then
+    exec_file_path=$first_arg
+    mode="exec"
+else
+    echo "Error: The first argument must be a PID or a valid file path to an executable."
     exit 1
 fi
 
@@ -58,7 +64,7 @@ generate_perf_data() {
     # 在输出目录下定义输出文件的名称
     out_perf="$OUTPUT_DIR/out_${timestamp}.perf"
     out_folded="$OUTPUT_DIR/out_${timestamp}.folded"
-    output_svg="$OUTPUT_DIR/kernel_${timestamp}.svg"
+    output_svg="$OUTPUT_DIR/${mode}_${timestamp}.svg"
 
     # 将性能数据转换为可读格式
     echo "Converting performance data to readable format..."
@@ -98,16 +104,31 @@ generate_perf_data() {
 # 设置一个信号陷阱，当接收到SIGINT信号时会调用一个函数来处理它
 trap handle_sigint INT
 
-# 根据是否有持续时间来执行perf record
-if [ -n "$duration" ]; then
-    echo "Recording performance data for PID $pid for $duration seconds..."
-    perf record -F 99 -p "$pid" -g -- sleep "$duration"
-else
-    echo "Recording performance data for PID $pid. Press Ctrl+C to stop recording..."
-    perf record -F 99 -p "$pid" -g &
-    PERF_PID=$!
-    # 等待perf进程结束
-    wait $PERF_PID
+# 根据mode执行perf record
+if [ "$mode" == "pid" ]; then
+    # 根据是否有持续时间来执行perf record
+    if [ -n "$duration" ]; then
+        echo "Recording performance data for PID $pid for $duration seconds..."
+        perf record -F 99 -p "$pid" -g -- sleep "$duration"
+    else
+        echo "Recording performance data for PID $pid. Press Ctrl+C to stop recording..."
+        perf record -F 99 -p "$pid" -g &
+        PERF_PID=$!
+        # 等待perf进程结束
+        wait $PERF_PID
+    fi
+elif [ "$mode" == "exec" ]; then
+    echo "Recording performance data for executable at path $exec_file_path..."
+    # 在后台执行perf并运行可执行文件
+    if [ -n "$duration" ]; then
+        perf record -F 99 -g -- "$exec_file_path" &
+        PERF_PID=$!
+        sleep "$duration"
+        kill -INT $PERF_PID
+        wait $PERF_PID
+    else
+        perf record -F 99 -g -- "$exec_file_path"
+    fi
 fi
 
 # 从这里开始，我们假设perf record已经正常退出，所以可以生成性能数据
