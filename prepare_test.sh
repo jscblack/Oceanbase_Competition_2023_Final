@@ -1,4 +1,4 @@
-./build.sh release --init --DOB_USE_CCACHE=ON --make \
+./build.sh release -DOB_USE_CCACHE=ON --init --make \
 && rm -rf ./competition \
 ; mkdir -p ./competition/bin \
 && cp ./build_release/src/observer/observer ./competition/bin/observer
