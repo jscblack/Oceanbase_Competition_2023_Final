@@ -151,8 +151,9 @@ int ObCreateTenantExecutor::wait_schema_refreshed_(const uint64_t tenant_id)
                  && ObSchemaService::is_formal_version(user_schema_version)) {
         break;
       } else {
+        const int64_t INTERVAL = common::is_bootstrap_in_single_mode()?100 * 1000L:500 * 1000L; // 100ms/500ms
         LOG_INFO("wait schema refreshed", K(tenant_id), K(meta_schema_version), K(user_schema_version));
-        ob_usleep(500 * 1000L); // 500ms
+        ob_usleep(INTERVAL);
       }
     }
   }
@@ -196,7 +197,7 @@ int ObCreateTenantExecutor::wait_user_ls_valid_(const uint64_t tenant_id)
       if (OB_FAIL(ret)) {
       } else if (user_ls_valid) {
       } else {
-        const int64_t INTERVAL = 500 * 1000L; // 500ms
+        const int64_t INTERVAL = common::is_bootstrap_in_single_mode()?100 * 1000L:500 * 1000L; // 100ms/500ms
         LOG_INFO("wait user ls valid", KR(ret), K(tenant_id));
         ob_usleep(INTERVAL);
       }
