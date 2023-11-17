@@ -171,6 +171,7 @@ int ObTenantThreadHelper::wait_tenant_data_version_ready_(
     const uint64_t tenant_id, const uint64_t &data_version)
 {
   int ret = OB_SUCCESS;
+  const bool single_bootstrap = common::is_bootstrap_in_single_mode();
   bool is_ready = false;
   uint64_t tenant_data_version = 0;
   while (!is_ready && !has_set_stop()) {
@@ -187,7 +188,7 @@ int ObTenantThreadHelper::wait_tenant_data_version_ready_(
     }
 
     if (!is_ready) {
-      idle(10 * 1000 * 1000);
+      idle(single_bootstrap?1000 * 1000:10 * 1000 *1000);
     }
   }
 
@@ -202,6 +203,7 @@ int ObTenantThreadHelper::wait_tenant_schema_and_version_ready_(
     const uint64_t tenant_id, const uint64_t &data_version)
 {
   int ret = OB_SUCCESS;
+  const bool single_bootstrap = common::is_bootstrap_in_single_mode();
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema ptr is null", KR(ret), KP(GCTX.schema_service_));
@@ -222,7 +224,7 @@ int ObTenantThreadHelper::wait_tenant_schema_and_version_ready_(
       }
 
       if (!is_ready) {
-        idle(10 * 1000 *1000);
+        idle(single_bootstrap?1000 * 1000:10 * 1000 *1000);
       }
     }
 
