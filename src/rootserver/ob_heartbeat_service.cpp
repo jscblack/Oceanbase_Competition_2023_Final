@@ -175,6 +175,7 @@ int ObHeartbeatService::switch_to_leader()
 void ObHeartbeatService::do_work()
 {
   int ret = OB_SUCCESS;
+  const bool single_bootstrap=common::is_bootstrap_in_single_mode();
   if (OB_UNLIKELY(!is_inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", KR(ret), K(is_inited_));
@@ -200,9 +201,9 @@ void ObHeartbeatService::do_work()
           }
         }
         if(OB_FAIL(ret)) {
-          idle(HB_FAILED_IDLE_TIME_US);
+          idle(single_bootstrap?HB_FAILED_IDLE_TIME_US/10:HB_FAILED_IDLE_TIME_US);
         } else {
-          idle(HB_IDLE_TIME_US);
+          idle(single_bootstrap?HB_IDLE_TIME_US/10:HB_IDLE_TIME_US);
         }
       }
     } // end while
