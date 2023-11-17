@@ -1748,6 +1748,10 @@ int ObRootService::schedule_refresh_server_timer_task(const int64_t delay)
 int ObRootService::update_rslist()
 {
   int ret = OB_SUCCESS;
+  if(common::is_bootstrap_in_single_mode()){
+    LOG_INFO("single bootstrap no need to broadcast");
+    return ret;
+  }
   ObUpdateRsListTask task;
   ObTimeoutCtx ctx;
   ctx.set_timeout(config_->rpc_timeout);
