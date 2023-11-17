@@ -78,6 +78,7 @@ do {\
 #define LOG_SET_MEMBER_RET(level, errcode, args...) { int ret = errcode; LOG_SET_MEMBER(level, ##args); }
 #define LOG_NONE_RET(level, errcode, args...) { int ret = errcode; LOG_NONE(level, ##args); }
 
+#define GLOBAL_ELECT_TIME 50_ms
 #define ELECT_TIME_GUARD(func_cost_threshold) TIMEGUARD_INIT(ELECT, func_cost_threshold, 10_s)
 
 namespace oceanbase
