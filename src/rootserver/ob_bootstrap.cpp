@@ -594,7 +594,7 @@ int ObBootstrap::execute_bootstrap(rootserver::ObServerZoneOpService &server_zon
 
   if (FAILEDx(add_servers_in_rs_list(server_zone_op_service))) {
     LOG_WARN("fail to add servers in rs_list_", KR(ret));
-  } else if (OB_FAIL(wait_all_rs_in_service())) {
+  } else if (!single_bootstrap && OB_FAIL(wait_all_rs_in_service())) {
     LOG_WARN("failed to wait all rs in service", KR(ret));
   } else {
     ROOTSERVICE_EVENT_ADD("bootstrap", "bootstrap_succeed");
