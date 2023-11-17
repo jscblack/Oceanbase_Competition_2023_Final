@@ -347,7 +347,10 @@ test/tmp
 test/var
 
 ############# utility #############
-utility/perf
+utility
 
 ############# competition #############
 competition
+
+############# tmp #############
+tmp
