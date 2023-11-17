@@ -1047,6 +1047,8 @@ int ObRootService::start_service()
   start_service_time_ = ObTimeUtility::current_time();
   ROOTSERVICE_EVENT_ADD("root_service", "start_rootservice", K_(self_addr));
   FLOG_INFO("[ROOTSERVICE_NOTICE] start to start rootservice", K_(start_service_time));
+  const bool single_bootstrap_ = common::is_bootstrap_in_single_mode();
+  FLOG_INFO("[ROOTSERVICE_NOTICE] check bootstrap status", K_(single_bootstrap));
   if (!inited_) {
     ret = OB_NOT_INIT;
     FLOG_WARN("rootservice not inited", KR(ret));
@@ -1082,9 +1084,10 @@ int ObRootService::start_service()
       FLOG_WARN("lst_operator set as rs leader failed", KR(ret));
     } else if (OB_FAIL(rs_status_.set_rs_status(status::IN_SERVICE))) {
       FLOG_WARN("fail to set rs status", KR(ret));
-    } else if (OB_FAIL(schedule_refresh_server_timer_task(0))) {
+    } else if (!single_bootstrap_ && OB_FAIL(schedule_refresh_server_timer_task(0))) {
       FLOG_WARN("failed to schedule refresh_server task", KR(ret));
-    } else if (OB_FAIL(schedule_restart_timer_task(0))) {
+    } else if (!single_bootstrap_ && OB_FAIL(schedule_restart_timer_task(0))) {
+      // 单机未初始化执行restart毫无意义
       FLOG_WARN("failed to schedule restart task", KR(ret));
     } else if (OB_FAIL(schema_service_->get_ddl_epoch_mgr().remove_all_ddl_epoch())) {
       FLOG_WARN("fail to remove ddl epoch", KR(ret));
