@@ -475,6 +475,14 @@ inline bool is_query_killed_return(const int ret)
     || OB_DEAD_LOCK == ret;
 }
 
+inline bool is_bootstrap_in_single_mode()
+{
+  //获取环境变量SINGLE_BOOTSTRAP
+  //如果SINGLE_BOOTSTRAP为1，表示单机模式启动
+  const char *env_= getenv("SINGLE_BOOTSTRAP");
+  return (env_ && 0 == strcmp("true", env_));
+}
+
 //@TODO shanyan.g Temporary settings for elr
 static const bool CAN_ELR = false;
 
