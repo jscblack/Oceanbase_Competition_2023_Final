@@ -25,6 +25,7 @@
 #include "lib/container/ob_array_iterator.h"
 #include "lib/file/file_directory_utils.h"
 #include "lib/encrypt/ob_encrypted_helper.h"
+#include "lib/oblog/ob_log_time.h"
 
 #include "share/ob_srv_rpc_proxy.h"
 #include "share/ob_thread_mgr.h"
@@ -1947,9 +1948,14 @@ int ObRootService::do_after_full_service() {
   return ret;
 }
 
+
 ////////////////////////////////////////////////////////////////
 int ObRootService::execute_bootstrap(const obrpc::ObBootstrapArg &arg)
 {
+
+PTIME_CURRENT_FUNC(ObRootService::execute_bootstrap);
+PTIME_UPTONOW_STR(ob_root_service.cpp);
+
   int ret = OB_SUCCESS;
   const obrpc::ObServerInfoList &server_list = arg.server_list_;
   BOOTSTRAP_LOG(INFO, "STEP_1.1:execute_bootstrap start to executor.");
@@ -1967,10 +1973,16 @@ int ObRootService::execute_bootstrap(const obrpc::ObBootstrapArg &arg)
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("lst_operator_ ptr is null", KR(ret), KP(lst_operator_));
   } else {
+
+PTIME_UPTONOW_STR(ob_root_service.cpp);
+
     update_cpu_quota_concurrency_in_memory_();
     // avoid bootstrap and do_restart run concurrently
     FLOG_INFO("[ROOTSERVICE_NOTICE] try to get lock for bootstrap in execute_bootstrap");
     ObLatchWGuard guard(bootstrap_lock_, ObLatchIds::RS_BOOTSTRAP_LOCK);
+
+PTIME_UPTONOW_STR(ob_root_service.cpp);
+
     FLOG_INFO("[ROOTSERVICE_NOTICE] success to get lock for bootstrap in execute_bootstrap");
     ObBootstrap bootstrap(rpc_proxy_, *lst_operator_, ddl_service_, unit_manager_,
                           *config_, arg, common_proxy_);
@@ -1982,28 +1994,30 @@ int ObRootService::execute_bootstrap(const obrpc::ObBootstrapArg &arg)
     ObGlobalStatProxy global_proxy(sql_proxy_, OB_SYS_TENANT_ID);
     ObArray<ObAddr> self_addr;
     if (OB_FAIL(ret)) {
-    } else if (OB_FAIL(do_restart())) {
+    } else PTIME_IF (OB_FAIL(do_restart())) {
       LOG_WARN("do restart task failed", K(ret));
-    } else if (OB_FAIL(check_ddl_allowed())) {
+    } else PTIME_IF (OB_FAIL(check_ddl_allowed())) {
       LOG_WARN("fail to check ddl allowed", K(ret));
-    } else if (OB_FAIL(update_all_server_and_rslist())) {
+    } else PTIME_IF (OB_FAIL(update_all_server_and_rslist())) {
       LOG_WARN("failed to update all_server and rslist", K(ret));
-    } else if (OB_FAIL(zone_manager_.reload())) {
+    } else PTIME_IF (OB_FAIL(zone_manager_.reload())) {
       LOG_WARN("failed to reload zone manager", K(ret));
-    } else if (OB_FAIL(set_cluster_version())) {
+    } else PTIME_IF (OB_FAIL(set_cluster_version())) {
       LOG_WARN("set cluster version failed", K(ret));
-    } else if (OB_FAIL(pl::ObPLPackageManager::load_all_sys_package(sql_proxy_))) {
+    } else PTIME_IF (OB_FAIL(pl::ObPLPackageManager::load_all_sys_package(sql_proxy_))) {
       LOG_WARN("load all system package failed", K(ret));
-    } else if (OB_FAIL(finish_bootstrap())) {
+    } else PTIME_IF (OB_FAIL(finish_bootstrap())) {
       LOG_WARN("failed to finish bootstrap", K(ret));
-    } else if (OB_FAIL(update_baseline_schema_version())) {
+    } else PTIME_IF (OB_FAIL(update_baseline_schema_version())) {
       LOG_WARN("failed to update baseline schema version", K(ret));
-    } else if (OB_FAIL(global_proxy.get_baseline_schema_version(
+    } else PTIME_IF (OB_FAIL(global_proxy.get_baseline_schema_version(
                        baseline_schema_version_))) {
       LOG_WARN("fail to get baseline schema version", KR(ret));
-    } else if (OB_FAIL(set_cpu_quota_concurrency_config_())) {
+    } else PTIME_IF (OB_FAIL(set_cpu_quota_concurrency_config_())) {
       LOG_WARN("failed to update cpu_quota_concurrency", K(ret));
     }
+
+PTIME_UPTONOW_STR(ob_root_service.cpp);
 
     if (OB_SUCC(ret)) {
       char ori_min_server_version[OB_SERVER_VERSION_LENGTH] = {'\0'};
@@ -2021,6 +2035,8 @@ int ObRootService::execute_bootstrap(const obrpc::ObBootstrapArg &arg)
                                "build_version", build_version.ptr());
       }
     }
+
+PTIME_UPTONOW_STR(ob_root_service.cpp);
 
     //clear bootstrap flag, regardless failure or success
     int tmp_ret = OB_SUCCESS;

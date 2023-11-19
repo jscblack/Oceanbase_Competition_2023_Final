@@ -22,6 +22,8 @@ using namespace oceanbase::common;
 
 OB_SERIALIZE_MEMBER(ObMonotonicTs, mts_);
 
+int64_t ObTimeUtility::last_time_ = 0;
+
 int64_t ObTimeUtility::current_time()
 {
   int err_ret = 0;
