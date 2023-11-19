@@ -456,6 +456,7 @@ int ObSchemaUtils::construct_inner_table_schemas(
       virtual_table_schema_creators,
       sys_view_schema_creators
     };
+    tables.reserve(ARRAYSIZEOF(creator_ptr_arrays));
     HEAP_VARS_2((ObTableSchema, table_schema), (ObTableSchema, data_schema)) {
       for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(creator_ptr_arrays); ++i) {
         for (const schema_create_func *creator_ptr = creator_ptr_arrays[i];

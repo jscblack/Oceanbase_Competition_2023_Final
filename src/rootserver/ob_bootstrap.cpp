@@ -845,13 +845,13 @@ int ObBootstrap::construct_all_schema(ObIArray<ObTableSchema> &table_schemas)
     sys_view_schema_creators
   };
 
-  ObTableSchema table_schema;
   if (OB_FAIL(check_inner_stat())) {
     LOG_WARN("check_inner_stat failed", KR(ret));
   } else if (OB_FAIL(table_schemas.reserve(OB_SYS_TABLE_COUNT))) {
     LOG_WARN("reserve failed", "capacity", OB_SYS_TABLE_COUNT, KR(ret));
   } else {
-    HEAP_VAR(ObTableSchema, data_schema) {
+    table_schemas.reserve(ARRAYSIZEOF(creator_ptr_arrays));
+    HEAP_VARS_2((ObTableSchema, table_schema), (ObTableSchema, data_schema)) {
       for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(creator_ptr_arrays); ++i) {
         for (const schema_create_func *creator_ptr = creator_ptr_arrays[i];
              OB_SUCCESS == ret && NULL != *creator_ptr; ++creator_ptr) {
