@@ -29,7 +29,6 @@ namespace common
 class ObTimeUtility
 {
 public:
-  static int64_t last_time_;
   static int64_t current_time();
 	static int64_t current_time_ns();
   static int64_t fast_current_time();

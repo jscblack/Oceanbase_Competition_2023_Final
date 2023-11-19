@@ -16,8 +16,6 @@
 
 #include "share/ob_define.h"
 #include "lib/time/ob_time_utility.h"
-#include "lib/oblog/ob_log_time.h"
-
 #include "lib/string/ob_sql_string.h"
 #include "lib/list/ob_dlist.h"
 #include "lib/container/ob_array_iterator.h"
@@ -56,7 +54,6 @@
 #include "rootserver/freeze/ob_freeze_info_manager.h"
 #include "rootserver/ob_table_creator.h"
 #include "share/scn.h"
-
 #include "rootserver/ob_heartbeat_service.h"
 #include "rootserver/ob_root_service.h"
 #ifdef OB_BUILD_TDE_SECURITY
@@ -240,9 +237,6 @@ ObPreBootstrap::ObPreBootstrap(ObSrvRpcProxy &rpc_proxy,
 
 int ObPreBootstrap::prepare_bootstrap(ObAddr &master_rs)
 {
-
-PTIME_CURRENT_FUNC(ObPreBootstrap::prepare_bootstrap);
-
   int ret = OB_SUCCESS;
   bool is_empty = false;
   bool match = false;

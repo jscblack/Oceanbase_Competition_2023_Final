@@ -25,7 +25,6 @@
 #include "lib/thread_local/ob_tsi_factory.h"
 #include "lib/utility/utility.h"
 #include "lib/time/ob_tsc_timestamp.h"
-#include "lib/oblog/ob_log_time.h"
 
 #include "common/ob_member_list.h"
 #include "common/ob_zone.h"
@@ -1403,9 +1402,6 @@ int ObService::broadcast_consensus_version(
 
 int ObService::bootstrap(const obrpc::ObBootstrapArg &arg)
 {
-
-PTIME_CURRENT_FUNC(ObService::bootstrap);
-
   int ret = OB_SUCCESS;
   const int64_t timeout = 600 * 1000 * 1000LL; // 10 minutes
   const obrpc::ObServerInfoList &rs_list = arg.server_list_;
@@ -1444,7 +1440,7 @@ PTIME_CURRENT_FUNC(ObService::bootstrap);
         if (INT64_MAX != THIS_WORKER.get_timeout_ts()) {
           rpc_timeout = max(rpc_timeout, THIS_WORKER.get_timeout_remain());
         }
-        PTIME_IF (OB_FAIL(rpc_proxy.to_addr(master_rs).timeout(rpc_timeout)
+        if (OB_FAIL(rpc_proxy.to_addr(master_rs).timeout(rpc_timeout)
                     .execute_bootstrap(arg))) {
           if (OB_RS_NOT_MASTER == ret) {
             BOOTSTRAP_LOG(INFO, "master root service not ready",

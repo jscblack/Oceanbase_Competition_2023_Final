@@ -206,8 +206,7 @@ int main() {
   // extractByTraceId();
   // extractByFileName();
   // extractByFuncName();
-  // extractByPattern("(PRINT TIME HERE)");
-  extractByPattern("(print time)"); 
+  extractByPattern("(PRINT TIME HERE)"); 
   // extractByPattern("()");  // pattern 加个括号就行
   outputStartEnd();
   return 0;
