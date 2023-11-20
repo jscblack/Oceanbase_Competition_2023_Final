@@ -22041,7 +22041,8 @@ int ObDDLService::create_tenant(
   } else if (OB_FAIL(create_tenant_end(user_tenant_id))) {
     LOG_WARN("failed to create tenant end", KR(ret), K(user_tenant_id));
   }
-
+  // TODO: 取消对ObTenantThreadHelper::wait_tenant_schema_and_version_ready_的阻塞
+  common::GLOBAL_BOOTSTRAP_VAR.set_finish_create_tenant_schema(true);
   if (OB_SUCC(ret)) {
     tenant_id = user_tenant_id;
   }

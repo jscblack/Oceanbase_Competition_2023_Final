@@ -483,6 +483,24 @@ inline bool is_bootstrap_in_single_mode()
   return (env_ && 0 == strcmp("true", env_));
 }
 
+struct global_bootstrap_var{
+  // 这里逐渐增加
+  // bootstrap
+
+
+  // create tenant
+  bool is_finish_create_tenant_schema(){
+    return ATOMIC_LOAD(&finish_create_tenant_schema_);
+  }
+  void set_finish_create_tenant_schema(bool finish){
+    ATOMIC_STORE(&finish_create_tenant_schema_, finish);
+  }
+private:
+  bool finish_create_tenant_schema_;
+};
+
+static global_bootstrap_var GLOBAL_BOOTSTRAP_VAR;
+
 //@TODO shanyan.g Temporary settings for elr
 static const bool CAN_ELR = false;
 

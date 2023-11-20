@@ -207,6 +207,8 @@ int ObTenantThreadHelper::wait_tenant_schema_and_version_ready_(
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema ptr is null", KR(ret), KP(GCTX.schema_service_));
+  } else if(OB_FAIL(!single_bootstrap||common::GLOBAL_BOOTSTRAP_VAR.is_finish_create_tenant_schema())){
+    LOG_WARN("tenant schema not ready, no need to wait", KR(ret), K(tenant_id));
   } else if (OB_FAIL(wait_tenant_data_version_ready_(tenant_id, data_version))) {
     LOG_WARN("failed to wait tenant data version", KR(ret), K(tenant_id), K(data_version));
   } else {
