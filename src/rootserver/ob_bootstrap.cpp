@@ -968,6 +968,10 @@ int ObBootstrap::create_all_schema(ObDDLService &ddl_service,
     int64_t begin = 0;
     int64_t batch_count = single_bootstrap ? 64 : BATCH_INSERT_SCHEMA_CNT;
     const int64_t MAX_RETRY_TIMES = 3;
+    const int para_batch = 6; // 匹配远端评测机配置数量
+    const int task_num = 128;
+    int direct_batch = 0; // 尝试进一步提高并行度
+    int cur_batch = 0;
     // add multi_thread
     ObCurTraceId::TraceId *cur_trace_id = ObCurTraceId::get_trace_id();
     struct create_schema_arg{
@@ -997,7 +1001,7 @@ int ObBootstrap::create_all_schema(ObDDLService &ddl_service,
             retry_times++;
             ret = OB_SUCCESS;
             SHARE_LOG(INFO, "schema error while create table, need retry", KR(ret), K(retry_times));
-            ob_usleep(100 * 1000L); // 100ms
+            ob_usleep(50 * 1000L); // 50ms
           } else {
             SHARE_LOG(INFO, "[parallel create schema] worker job end", K(begin), K(end),"time_used",ObTimeUtility::current_time() - inner_begin_time);
             ATOMIC_AAF(&created_schema_,end - begin);
@@ -1009,14 +1013,9 @@ int ObBootstrap::create_all_schema(ObDDLService &ddl_service,
       int created_schema_ = 0;
       int failed_count_ = 0;
     } tp;
-
-    int para_batch = 6; // 匹配远端评测机配置数量
-    const int task_num = 128;
     tp.init(para_batch, task_num, "CREATE_SCM", OB_SYS_TENANT_ID);
 
     const int64_t begin_task_time = ObTimeUtility::current_time();
-    int direct_batch = 0; // 尝试进一步提高并行度
-    int cur_batch = 0;
     for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas.count(); ++i) {
       if (table_schemas.count() == (i + 1) || (i + 1 - begin) >= batch_count) {
         int64_t end = i + 1;
@@ -1055,7 +1054,6 @@ int ObBootstrap::create_all_schema(ObDDLService &ddl_service,
   }
   LOG_INFO("end create all schemas", K(ret), "table count", table_schemas.count(),
            "time_used", ObTimeUtility::current_time() - begin_time);
-  
   return ret;
 }
 
