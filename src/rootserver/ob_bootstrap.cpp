@@ -967,33 +967,85 @@ int ObBootstrap::create_all_schema(ObDDLService &ddl_service,
     int64_t begin = 0;
     int64_t batch_count = BATCH_INSERT_SCHEMA_CNT;
     const int64_t MAX_RETRY_TIMES = 3;
-    for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas.count(); ++i) {
-      if (table_schemas.count() == (i + 1) || (i + 1 - begin) >= batch_count) {
+    // add multi_thread
+    ObCurTraceId::TraceId *cur_trace_id = ObCurTraceId::get_trace_id();
+    struct create_schema_arg{
+      ObDDLService &ddl_service;
+      ObIArray<ObTableSchema> &table_schemas;
+      int64_t begin;
+      int64_t end;
+      ObCurTraceId::TraceId *cur_trace_id;
+      create_schema_arg(ObDDLService &ddl_service_,ObIArray<ObTableSchema> &table_schemas_,int64_t begin_,int64_t end_,ObCurTraceId::TraceId * cur_trace_id_):
+        ddl_service(ddl_service_),table_schemas(table_schemas_),begin(begin_),end(end_),cur_trace_id(cur_trace_id_){};
+    };
+    class : public ObSimpleThreadPool {
+      void handle(void *task) {
+        create_schema_arg *task_arg=reinterpret_cast<create_schema_arg*>(task);
+        const int64_t inner_begin_time = ObTimeUtility::current_time();
+        LOG_INFO("[parallel create schema] worker job start", K(task_arg->begin), K(task_arg->end));
+        ObCurTraceId::set(*task_arg->cur_trace_id);
+        int ret = OB_SUCCESS;
         int64_t retry_times = 1;
         while (OB_SUCC(ret)) {
-          if (OB_FAIL(batch_create_schema(ddl_service, table_schemas, begin, i + 1))) {
-            LOG_WARN("batch create schema failed", K(ret), "table count", i + 1 - begin);
-            // bugfix:
+          if (OB_FAIL(batch_create_schema(task_arg->ddl_service, task_arg->table_schemas, task_arg->begin, task_arg->end))) {
+            LOG_WARN("batch create schema failed", K(ret), "table count", task_arg->end - task_arg->begin);
             if ((OB_SCHEMA_EAGAIN == ret
-                 || OB_ERR_WAIT_REMOTE_SCHEMA_REFRESH == ret)
+                || OB_ERR_WAIT_REMOTE_SCHEMA_REFRESH == ret)
                 && retry_times <= MAX_RETRY_TIMES) {
+              ATOMIC_INC(&failed_count_);
               retry_times++;
               ret = OB_SUCCESS;
               LOG_INFO("schema error while create table, need retry", KR(ret), K(retry_times));
               ob_usleep(1 * 1000 * 1000L); // 1s
             }
           } else {
+            LOG_INFO("[parallel create schema] worker job end", K(task_arg->begin), K(task_arg->end),"time_used",ObTimeUtility::current_time() - inner_begin_time);
+            ATOMIC_AAF(&created_schema_,task_arg->end - task_arg->begin);
             break;
           }
         }
-        if (OB_SUCC(ret)) {
-          begin = i + 1;
-        }
       }
+    public:
+      int created_schema_ = 0;
+      int failed_count_ = 0;
+    } tp;
+    tp.init(table_schemas.count()/batch_count+(table_schemas.count()%batch_count!=0?1:0),table_schemas.count()/batch_count+(table_schemas.count()%batch_count!=0?1:0),"CREATE_SCM",OB_SYS_TENANT_ID);
+
+    const int64_t begin_task_time = ObTimeUtility::current_time();
+    int direct_batch = 9;
+    for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas.count(); ++i) {
+      if (table_schemas.count() == (i + 1) || (i + 1 - begin) >= batch_count) {
+        int64_t retry_times = 1;
+        int64_t end = i + 1;
+        create_schema_arg *task_arg = new create_schema_arg(ddl_service,table_schemas,begin,end,cur_trace_id);
+        if(direct_batch){
+          // use direct
+          if(OB_FAIL(batch_create_schema(ddl_service, table_schemas, begin, end))){
+            LOG_WARN("[direct create schema] submit worker job failed", K(begin), K(end));
+          }
+          LOG_INFO("[direct create schema] submit worker job success", K(begin), K(end));
+          ATOMIC_AAF(&tp.created_schema_, end-begin);
+          direct_batch--;
+        }else{
+          // use parallel
+          if(OB_FAIL(tp.push((void*)(task_arg)))){
+            LOG_WARN("[parallel create schema] submit worker job failed", K(begin), K(end));
+          }
+          LOG_INFO("[parallel create schema] submit worker job success", K(begin), K(end));
+        }
+        begin = i + 1;
+      }
+    }
+    LOG_INFO("submit all schemas tasks","time_used",ObTimeUtility::current_time() - begin_task_time);
+    tp.destroy();
+    LOG_INFO("finish all schemas tasks","time_used",ObTimeUtility::current_time() - begin_task_time,"parallel_created",tp.created_schema_,"but failed",tp.failed_count_);
+    if(tp.created_schema_!=table_schemas.count()){
+      LOG_ERROR("error all schemas tasks",K(ret),"lost schemas",table_schemas.count()-tp.created_schema_);
     }
   }
   LOG_INFO("end create all schemas", K(ret), "table count", table_schemas.count(),
            "time_used", ObTimeUtility::current_time() - begin_time);
+  
   return ret;
 }
 
