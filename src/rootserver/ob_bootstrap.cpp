@@ -1009,13 +1009,18 @@ int ObBootstrap::create_all_schema(ObDDLService &ddl_service,
       int created_schema_ = 0;
       int failed_count_ = 0;
     } tp;
-    tp.init(table_schemas.count()/batch_count+(table_schemas.count()%batch_count!=0?1:0),table_schemas.count()/batch_count+(table_schemas.count()%batch_count!=0?1:0),"CREATE_SCM",OB_SYS_TENANT_ID);
+
+    int para_batch = 2;
+    const int task_num=table_schemas.count()/batch_count+(table_schemas.count()%batch_count!=0?1:0);
+    // tp.init(table_schemas.count()/batch_count+(table_schemas.count()%batch_count!=0?1:0),table_schemas.count()/batch_count+(table_schemas.count()%batch_count!=0?1:0),"CREATE_SCM",OB_SYS_TENANT_ID);
+    tp.init(para_batch, task_num, "CREATE_SCM", OB_SYS_TENANT_ID);
 
     const int64_t begin_task_time = ObTimeUtility::current_time();
-    int direct_batch = 9;
+    int direct_batch = 1;
+    // 尝试分批并行
+    int cur_batch = 0;
     for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas.count(); ++i) {
       if (table_schemas.count() == (i + 1) || (i + 1 - begin) >= batch_count) {
-        int64_t retry_times = 1;
         int64_t end = i + 1;
         create_schema_arg *task_arg = new create_schema_arg(ddl_service,table_schemas,begin,end,cur_trace_id);
         if(direct_batch){
@@ -1032,6 +1037,12 @@ int ObBootstrap::create_all_schema(ObDDLService &ddl_service,
             LOG_WARN("[parallel create schema] submit worker job failed", K(begin), K(end));
           }
           LOG_INFO("[parallel create schema] submit worker job success", K(begin), K(end));
+          cur_batch++;
+          if(cur_batch==para_batch){
+            tp.destroy();
+            tp.init(para_batch,task_num,"CREATE_SCM",OB_SYS_TENANT_ID);
+            cur_batch=0;
+          }
         }
         begin = i + 1;
       }
