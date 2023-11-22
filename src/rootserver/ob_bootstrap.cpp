@@ -1010,19 +1010,18 @@ int ObBootstrap::create_all_schema(ObDDLService &ddl_service,
       int failed_count_ = 0;
     } tp;
 
-    int para_batch = 16;
+    int para_batch = 6; // 匹配远端评测机配置数量
     const int task_num = 128;
     tp.init(para_batch, task_num, "CREATE_SCM", OB_SYS_TENANT_ID);
 
     const int64_t begin_task_time = ObTimeUtility::current_time();
-    int direct_batch = 0;
-    // 尝试分批并行
+    int direct_batch = 0; // 尝试进一步提高并行度
     int cur_batch = 0;
     for (int64_t i = 0; OB_SUCC(ret) && i < table_schemas.count(); ++i) {
       if (table_schemas.count() == (i + 1) || (i + 1 - begin) >= batch_count) {
         int64_t end = i + 1;
         create_schema_arg *task_arg = new create_schema_arg(ddl_service,table_schemas,begin,end,cur_trace_id);
-        if(direct_batch){
+        if(!single_bootstrap || direct_batch){
           // use direct
           if(OB_FAIL(batch_create_schema(ddl_service, table_schemas, begin, end))){
             LOG_WARN("[direct create schema] submit worker job failed", K(begin), K(end));
@@ -1036,12 +1035,13 @@ int ObBootstrap::create_all_schema(ObDDLService &ddl_service,
             LOG_WARN("[parallel create schema] submit worker job failed", K(begin), K(end));
           }
           LOG_INFO("[parallel create schema] submit worker job success", K(begin), K(end));
-          cur_batch++;
-          if(cur_batch==para_batch){
-            tp.destroy();
-            tp.init(para_batch,task_num,"CREATE_SCM",OB_SYS_TENANT_ID);
-            cur_batch=0;
-          }
+          // 尝试分批并行，暂时关闭
+          // cur_batch++;
+          // if(cur_batch==para_batch){
+          //   tp.destroy();
+          //   tp.init(para_batch,task_num,"CREATE_SCM",OB_SYS_TENANT_ID);
+          //   cur_batch=0;
+          // }
         }
         begin = i + 1;
       }
