@@ -94,7 +94,7 @@ public:
   friend class TestBatchProcessQueue_test_eput2_Test;
   friend class TestBatchProcessQueue_test_update_process_Test;
   friend class TestBatchProcessQueue_test_single_update_Test;
-  static const int64_t QUEUE_WAIT_INTERVAL_MS = 200; // 200ms
+  static const int64_t QUEUE_WAIT_INTERVAL_MS = 50; // 50ms
   ObUniqTaskQueue() : inited_(false), queue_size_(0), thread_name_(nullptr), task_set_(),
                       task_count_(0), group_map_(), processing_task_set_(), cur_group_(NULL),
                       processing_thread_count_(0), barrier_task_count_(0),
