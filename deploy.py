@@ -11,7 +11,6 @@ import traceback
 
 _logger = logging.getLogger("DeployDemo")
 
-
 def param_check(args):
     # TODO
     return True
@@ -104,7 +103,6 @@ def __create_tenant(
 
 
 if __name__ == "__main__":
-    time.sleep(fake_time_mask)
     log_level = logging.INFO
     log_format = (
         "%(asctime)s.%(msecs)03d [%(levelname)-5s] - %(message)s "
