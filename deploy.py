@@ -10,7 +10,7 @@ import logging
 import traceback
 
 _logger = logging.getLogger("DeployDemo")
-fake_time_mask = 10  # TODO: 用来额外添加延时
+fake_time_mask = 0  # TODO: 用来额外添加延时
 
 
 def param_check(args):
