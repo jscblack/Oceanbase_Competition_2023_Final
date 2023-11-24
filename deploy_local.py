@@ -10,7 +10,6 @@ import logging
 import traceback
 
 _logger = logging.getLogger("DeployDemo")
-fake_time_mask = 0  # TODO: 用来额外添加延时
 
 
 def param_check(args):
@@ -61,7 +60,7 @@ def __try_to_connect(host, mysql_port: int, *, timeout_seconds=60):
             return mysql.connect(host=host, user="root", port=mysql_port, passwd="")
         except mysql.err.Error as error:
             error_return = error
-            time.sleep(1)
+            time.sleep(0.25)
 
     _logger.info("failed to connect to observer fater %f seconds",
                  timeout_seconds)
@@ -105,7 +104,6 @@ def __create_tenant(
 
 
 if __name__ == "__main__":
-    time.sleep(fake_time_mask)
     log_level = logging.INFO
     log_format = (
         "%(asctime)s.%(msecs)03d [%(levelname)-5s] - %(message)s "
@@ -204,7 +202,6 @@ if __name__ == "__main__":
         _logger.info("start observer failed")
         exit(1)
 
-    time.sleep(1)  # 应该是给observer进程启动留的时间
     try:
         db = __try_to_connect(args.ip, int(args.mysql_port))
         cursor = db.cursor(cursor=mysql.cursors.DictCursor)
