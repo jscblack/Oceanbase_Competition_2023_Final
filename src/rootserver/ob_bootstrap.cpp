@@ -1003,7 +1003,7 @@ int ObBootstrap::create_all_schema(ObDDLService &ddl_service,
             retry_times++;
             ret = OB_SUCCESS;
             LOG_INFO("schema error while create table, need retry", KR(ret), K(retry_times));
-            // ob_usleep(50 * 1000L); // 50ms
+            ob_usleep(25 * 1000L); // 25ms
           } else {
             LOG_INFO("[parallel create schema] worker job end", K(begin), K(end),"time_used",ObTimeUtility::current_time() - inner_begin_time);
             ATOMIC_AAF(&created_schema_, schema_count);
