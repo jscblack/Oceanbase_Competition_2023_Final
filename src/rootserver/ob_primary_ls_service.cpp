@@ -64,6 +64,7 @@ void ObPrimaryLSService::destroy()
 void ObPrimaryLSService::do_work()
 {
   int ret = OB_SUCCESS;
+  LOG_INFO("[PRIMARY_LS_SERVICE] start to do work", KR(ret));
   const bool single_bootstrap = common::is_bootstrap_in_single_mode();
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
@@ -71,7 +72,7 @@ void ObPrimaryLSService::do_work()
   } else if (OB_FAIL(wait_tenant_schema_and_version_ready_(tenant_id_, DATA_VERSION_4_1_0_0))) {
     LOG_WARN("failed to wait tenant schema version ready", KR(ret), K(tenant_id_), K(DATA_CURRENT_VERSION));
   } else {
-    int64_t idle_time_us =single_bootstrap?500 * 1000L:1000 * 1000L;
+    int64_t idle_time_us =single_bootstrap?200 * 1000L:1000 * 1000L;
     int tmp_ret = OB_SUCCESS;
     share::schema::ObTenantSchema tenant_schema;
     while (!has_set_stop()) {

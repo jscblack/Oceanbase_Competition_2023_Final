@@ -178,7 +178,8 @@ if __name__ == "__main__":
     __build_env(home_abs_path)
     os.environ["SINGLE_BOOTSTRAP"] = "true" # 设置这个环境变量，让observer进程能够感知到是单机启动
     rootservice = f"{args.ip}:{args.rpc_port}"
-    custom_opt_str = (",syslog_level=ERROR,"
+    custom_opt_str = (","
+                        "syslog_level=ERROR,"
                         "enable_record_trace_log=False,"
                         "enable_sql_audit=False,"
                         "enable_rereplication=False,"
@@ -186,11 +187,11 @@ if __name__ == "__main__":
                         "enable_tcp_keepalive=False,"
                         "rootservice_ready_check_interval=100000us,"
                         "lease_time=1s,"
-                        "server_check_interval=1m,"
-                        "plan_cache_evict_interval=1m,"
-                        "virtual_table_location_cache_expire_time=1m,"
+                        "server_check_interval=30s,"
+                        "plan_cache_evict_interval=30s,"
+                        "virtual_table_location_cache_expire_time=30s,"
+                        "location_cache_refresh_min_interval=30s,"
                         "rpc_timeout=2s")
-
     args.opt_str += custom_opt_str
     observer_args = f"-p {args.mysql_port} -P {args.rpc_port} -z {args.zone} -c {args.cluster_id} -d {data_abs_path} -i {args.devname} -r {rootservice} -I {args.ip} -o {args.opt_str}"
 

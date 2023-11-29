@@ -172,6 +172,7 @@ int ObTenantThreadHelper::wait_tenant_data_version_ready_(
 {
   int ret = OB_SUCCESS;
   const bool single_bootstrap = common::is_bootstrap_in_single_mode();
+  const int64_t start_ts = ObTimeUtility::current_time();
   bool is_ready = false;
   uint64_t tenant_data_version = 0;
   while (!is_ready && !has_set_stop()) {
@@ -188,7 +189,7 @@ int ObTenantThreadHelper::wait_tenant_data_version_ready_(
     }
 
     if (!is_ready) {
-      idle(single_bootstrap?1000 * 1000:10 * 1000 *1000);
+      idle(single_bootstrap?500 * 1000:10 * 1000 *1000);
     }
   }
 
@@ -196,6 +197,9 @@ int ObTenantThreadHelper::wait_tenant_data_version_ready_(
     LOG_WARN("thread has been stopped", K(is_ready), K(tenant_id));
     ret = OB_IN_STOP_STATE;
   }
+  LOG_INFO("wait tenant data version ready", KR(ret), K(tenant_id),
+        K(data_version), K(tenant_data_version),
+        "cost", ObTimeUtility::current_time() - start_ts);
   return ret;
 }
 
@@ -203,6 +207,7 @@ int ObTenantThreadHelper::wait_tenant_schema_and_version_ready_(
     const uint64_t tenant_id, const uint64_t &data_version)
 {
   int ret = OB_SUCCESS;
+  const int64_t start_ts = ObTimeUtility::current_time();
   const bool single_bootstrap = common::is_bootstrap_in_single_mode();
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
@@ -227,7 +232,7 @@ int ObTenantThreadHelper::wait_tenant_schema_and_version_ready_(
       }
 
       if (!is_ready) {
-        idle(single_bootstrap?1000 * 1000:10 * 1000 *1000);
+        idle(single_bootstrap?500 * 1000:10 * 1000 *1000);
       }
     }
 
@@ -236,6 +241,8 @@ int ObTenantThreadHelper::wait_tenant_schema_and_version_ready_(
       ret = OB_IN_STOP_STATE;
     }
   }
+  LOG_INFO("wait tenant schema ready", KR(ret), K(tenant_id),
+        K(data_version), "cost", ObTimeUtility::current_time() - start_ts);
   return ret;
 }
 

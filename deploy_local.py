@@ -186,9 +186,10 @@ if __name__ == "__main__":
                         "enable_tcp_keepalive=False,"
                         "rootservice_ready_check_interval=100000us,"
                         "lease_time=1s,"
-                        "server_check_interval=1m,"
-                        "plan_cache_evict_interval=1m,"
-                        "virtual_table_location_cache_expire_time=1m,"
+                        "server_check_interval=30s,"
+                        "plan_cache_evict_interval=30s,"
+                        "virtual_table_location_cache_expire_time=30s,"
+                        "location_cache_refresh_min_interval=30s,"
                         "rpc_timeout=2s")
 
     args.opt_str += custom_opt_str
