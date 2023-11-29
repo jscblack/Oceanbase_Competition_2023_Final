@@ -2054,7 +2054,7 @@ private:
       ObDDLService &ddl_service,
       const uint64_t tenant_id,
       ObIArray<ObTableSchema> &tables,
-      const int64_t begin, const int64_t end);
+      int64_t &begin, int64_t &end);
   int try_force_drop_tenant(const share::schema::ObTenantSchema &tenant_schema);
 
   int handle_security_audit_in_trans(const share::schema::ObSAuditSchema &audit_schema,

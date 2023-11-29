@@ -956,11 +956,13 @@ int ObBootstrap::create_all_schema(ObDDLService &ddl_service,
     // persist __all_core_table's schema in inner table, which is only used for sys views.
     HEAP_VAR(ObTableSchema, core_table) {
       ObArray<ObTableSchema> tmp_tables;
+      int64_t zero=0;
+      int64_t one=1;
       if (OB_FAIL(ObInnerTableSchema::all_core_table_schema(core_table))) {
         LOG_WARN("fail to construct __all_core_table's schema", KR(ret), K(core_table));
       } else if (OB_FAIL(tmp_tables.push_back(core_table))) {
         LOG_WARN("fail to push back __all_core_table's schema", KR(ret), K(core_table));
-      } else if (OB_FAIL(batch_create_schema(ddl_service, tmp_tables, 0, 1))) {
+      } else if (OB_FAIL(batch_create_schema(ddl_service, tmp_tables, zero, one))) {
         LOG_WARN("fail to create __all_core_table's schema", KR(ret), K(core_table));
       }
     }
@@ -989,8 +991,8 @@ int ObBootstrap::create_all_schema(ObDDLService &ddl_service,
         const int64_t inner_begin_time = ObTimeUtility::current_time();
         int64_t begin = task_arg->begin;
         int64_t end = task_arg->end;
-        
-        SHARE_LOG(INFO, "[parallel create schema] worker job start", K(begin), K(end));
+        int64_t schema_count = end - begin;
+        LOG_INFO("[parallel create schema] worker job start", K(begin), K(end));
         ObCurTraceId::set(*task_arg->cur_trace_id);
         int ret = OB_SUCCESS;
         int64_t retry_times = 1;
@@ -1000,11 +1002,11 @@ int ObBootstrap::create_all_schema(ObDDLService &ddl_service,
             ATOMIC_INC(&failed_count_);
             retry_times++;
             ret = OB_SUCCESS;
-            SHARE_LOG(INFO, "schema error while create table, need retry", KR(ret), K(retry_times));
-            ob_usleep(50 * 1000L); // 50ms
+            LOG_INFO("schema error while create table, need retry", KR(ret), K(retry_times));
+            // ob_usleep(50 * 1000L); // 50ms
           } else {
-            SHARE_LOG(INFO, "[parallel create schema] worker job end", K(begin), K(end),"time_used",ObTimeUtility::current_time() - inner_begin_time);
-            ATOMIC_AAF(&created_schema_,end - begin);
+            LOG_INFO("[parallel create schema] worker job end", K(begin), K(end),"time_used",ObTimeUtility::current_time() - inner_begin_time);
+            ATOMIC_AAF(&created_schema_, schema_count);
             break;
           }
         }
@@ -1059,10 +1061,12 @@ int ObBootstrap::create_all_schema(ObDDLService &ddl_service,
 
 int ObBootstrap::batch_create_schema(ObDDLService &ddl_service,
                                      ObIArray<ObTableSchema> &table_schemas,
-                                     const int64_t begin, const int64_t end)
+                                     int64_t &begin, int64_t &end)
 {
   int ret = OB_SUCCESS;
   const int64_t begin_time = ObTimeUtility::current_time();
+  int64_t ret_begin = end;// 回参，用来表示失败的起始位置
+  int64_t ret_end = begin;// 回参，用来表示失败的结束位置
   ObDDLSQLTransaction trans(&(ddl_service.get_schema_service()), true, true, false, false);
   if (begin < 0 || begin >= end || end > table_schemas.count()) {
     ret = OB_INVALID_ARGUMENT;
@@ -1078,6 +1082,7 @@ int ObBootstrap::batch_create_schema(ObDDLService &ddl_service,
       LOG_WARN("start transaction failed", KR(ret));
     } else {
       bool is_truncate_table = false;
+
       for (int64_t i = begin; OB_SUCC(ret) && i < end; ++i) {
         ObTableSchema &table = table_schemas.at(i);
         const ObString *ddl_stmt = NULL;
@@ -1090,6 +1095,8 @@ int ObBootstrap::batch_create_schema(ObDDLService &ddl_service,
           LOG_WARN("add table schema failed", K(ret),
               "table_id", table.get_table_id(),
               "table_name", table.get_table_name());
+          ret_begin = min(ret_begin, i);
+          ret_end = max(ret_end, i + 1);
         } else {
           int64_t end_time = ObTimeUtility::current_time();
           LOG_INFO("add table schema succeed", K(i),
@@ -1114,6 +1121,10 @@ int ObBootstrap::batch_create_schema(ObDDLService &ddl_service,
       "total_time_used", now - begin_time,
       "end_transaction_time_used", now - begin_commit_time);
   //BOOTSTRAP_CHECK_SUCCESS();
+  if(OB_FAIL(ret)){
+    begin=ret_begin;
+    end=ret_end;
+  }
   return ret;
 }
 

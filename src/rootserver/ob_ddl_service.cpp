@@ -23243,7 +23243,7 @@ int ObDDLService::create_sys_table_schemas(
         const int64_t inner_begin_time = ObTimeUtility::current_time();
         int64_t begin = task_arg->begin;
         int64_t end = task_arg->end;
-        
+        int64_t schema_count = end-begin;
         SHARE_LOG(INFO, "[parallel create schema] worker job start", K(begin), K(end));
         ObCurTraceId::set(*task_arg->cur_trace_id);
         int ret = OB_SUCCESS;
@@ -23255,10 +23255,10 @@ int ObDDLService::create_sys_table_schemas(
             retry_times++;
             ret = OB_SUCCESS;
             SHARE_LOG(INFO, "schema error while create table, need retry", KR(ret), K(retry_times));
-            ob_usleep(25 * 1000L); // 25ms
+            ob_usleep(10 * 1000L); // 10ms
           } else {
             SHARE_LOG(INFO, "[parallel create schema] worker job end", K(begin), K(end),"time_used",ObTimeUtility::current_time() - inner_begin_time);
-            ATOMIC_AAF(&created_schema_,end - begin);
+            ATOMIC_AAF(&created_schema_, schema_count);
             break;
           }
         }
@@ -23308,10 +23308,12 @@ int ObDDLService::batch_create_sys_table_schemas(
     ObDDLService &ddl_service,
     const uint64_t tenant_id,
     ObIArray<ObTableSchema> &tables,
-    const int64_t begin, const int64_t end)
+    int64_t &begin, int64_t &end)
 {
   int ret = OB_SUCCESS;
   const int64_t begin_time = ObTimeUtility::current_time();
+  int64_t ret_begin = end;// 回参，用来表示失败的起始位置
+  int64_t ret_end = begin;// 回参，用来表示失败的结束位置
   ObDDLSQLTransaction trans(&(ddl_service.get_schema_service()), true, true, false, false);
   if (begin < 0 || begin >= end || end > tables.count()) {
     ret = OB_INVALID_ARGUMENT;
@@ -23337,6 +23339,8 @@ int ObDDLService::batch_create_sys_table_schemas(
           LOG_WARN("add table schema failed", K(ret),
               "table_id", table.get_table_id(),
               "table_name", table.get_table_name());
+          ret_begin = min(ret_begin, i);
+          ret_end = max(ret_end, i + 1);
         } else {
           int64_t end_time = ObTimeUtility::current_time();
           LOG_INFO("add table schema succeed", K(i),
@@ -23360,6 +23364,10 @@ int ObDDLService::batch_create_sys_table_schemas(
   LOG_INFO("batch create schema finish", K(ret), "table count", end - begin,
       "total_time_used", now - begin_time,
       "end_transaction_time_used", now - begin_commit_time);
+  if(OB_FAIL(ret)){
+    begin=ret_begin;
+    end=ret_end;
+  }
   return ret;
 }
 
