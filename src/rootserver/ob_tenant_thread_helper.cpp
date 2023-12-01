@@ -189,7 +189,7 @@ int ObTenantThreadHelper::wait_tenant_data_version_ready_(
     }
 
     if (!is_ready) {
-      idle(single_bootstrap?500 * 1000:10 * 1000 *1000);
+      idle(single_bootstrap?200 * 1000:10 * 1000 *1000);
     }
   }
 
@@ -232,7 +232,7 @@ int ObTenantThreadHelper::wait_tenant_schema_and_version_ready_(
       }
 
       if (!is_ready) {
-        idle(single_bootstrap?500 * 1000:10 * 1000 *1000);
+        idle(single_bootstrap?200 * 1000:10 * 1000 *1000);
       }
     }
 
