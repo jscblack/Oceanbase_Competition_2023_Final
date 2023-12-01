@@ -27,7 +27,7 @@ namespace palf
 namespace election
 {
 
-int64_t MAX_TST = common::is_bootstrap_in_single_mode()?100_ms:1_s;// 单机boot情况下缩小10倍
+int64_t MAX_TST = common::is_bootstrap_in_single_mode()?10_ms:1_s;// 单机boot情况下缩小10倍
 int64_t INIT_TS = -1;
 ObOccamTimer GLOBAL_REPORT_TIMER;
 

@@ -203,7 +203,7 @@ int ObLSLeaderElectionWaiter::wait_elect_leader(
       }
       sleep_interval = std::min(sleep_interval * 2, check_interval);
       if(single_bootstrap){
-        sleep_interval=std::min(10L, sleep_interval);
+        sleep_interval=std::min(10L * 1000L, sleep_interval);
       }
     }
     if (stop_ && OB_SUCC(ret)) {
