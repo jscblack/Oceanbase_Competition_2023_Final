@@ -653,7 +653,7 @@ int ObLSCreator::check_member_list_and_learner_list_all_in_meta_table_(
   int ret = OB_SUCCESS;
   bool has_replica_only_in_member_list_or_learner_list = true;
   ObLSInfo ls_info_to_check;
-  const uint32_t retry_interval_us = common::is_bootstrap_in_single_mode()?100 * 1000:1000 * 1000; // 100ms/1s
+  const uint32_t retry_interval_us = common::is_bootstrap_in_single_mode()?200 * 1000:1000 * 1000; // 100ms/1s
   ObTimeoutCtx ctx;
   if (OB_ISNULL(GCTX.lst_operator_)
       || OB_UNLIKELY(!is_valid() || !member_list.is_valid())) {
