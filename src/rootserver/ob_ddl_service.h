@@ -96,6 +96,51 @@ class ObTableGroupHelp;
 //class ObFreezeInfoManager;
 class ObSnapshotInfoManager;
 
+struct CreateNormalTenantContext {
+  const uint64_t tenant_id;
+  const ObIArray<share::ObResourcePoolName> &pool_list;
+  const share::schema::ObTenantSchema &tenant_schema;
+  const share::ObTenantRole &tenant_role;
+  const share::SCN &recovery_until_scn;
+  share::schema::ObSysVariableSchema &sys_variable;
+  const bool create_ls_with_palf;
+  const palf::PalfBaseInfo &palf_base_info;
+  const common::ObIArray<common::ObConfigPairs> &init_configs;
+  bool is_creating_standby;
+  const common::ObString &log_restore_source;
+
+  CreateNormalTenantContext(const uint64_t tenant_id_,
+    const ObIArray<share::ObResourcePoolName> &pool_list_,
+    const share::schema::ObTenantSchema &tenant_schema_,
+    const share::ObTenantRole &tenant_role_,
+    const SCN &recovery_until_scn_,
+    ObSysVariableSchema &sys_variable_,
+    const bool create_ls_with_palf_,
+    const palf::PalfBaseInfo &palf_base_info_,
+    const common::ObIArray<common::ObConfigPairs> &init_configs_,
+    bool is_creating_standby_,
+    const common::ObString &log_restore_source_):
+    tenant_id(tenant_id_), pool_list(pool_list_), tenant_schema(tenant_schema_),
+    tenant_role(tenant_role_), recovery_until_scn(recovery_until_scn_),
+    sys_variable(sys_variable_), create_ls_with_palf(create_ls_with_palf_),
+    palf_base_info(palf_base_info_), init_configs(init_configs_),
+    is_creating_standby(is_creating_standby_), log_restore_source(log_restore_source_)
+    {}
+//   {
+//     tenant_id = tenant_id_;
+//     pool_list = pool_list_;
+//     tenant_schema = tenant_schema_;
+//     tenant_role = tenant_role_;
+//     recovery_until_scn = recovery_until_scn_;
+//     sys_variable = sys_variable_;
+//     create_ls_with_palf = create_ls_with_palf_;
+//     palf_base_info = palf_base_info_;
+//     init_configs = init_configs_;
+//     is_creating_standby = is_creating_standby_;
+//     log_restore_source = log_restore_source_;
+//   }
+};
+
 class ObDDLService
 {
 public:
@@ -2016,6 +2061,9 @@ private:
       const common::ObIArray<common::ObConfigPairs> &init_configs,
       bool is_creating_standby,
       const common::ObString &log_restore_source);
+  int create_normal_tenant_parallel(
+      CreateNormalTenantContext &meta_context,
+      CreateNormalTenantContext &user_context);
   int set_sys_ls_status(const uint64_t tenant_id);
   int create_tenant_sys_ls(
       const share::schema::ObTenantSchema &tenant_schema,

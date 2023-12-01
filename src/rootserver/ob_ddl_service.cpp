@@ -22005,23 +22005,36 @@ int ObDDLService::create_tenant(
       DEBUG_SYNC(BEFORE_CREATE_META_TENANT);
       // create ls/tablet/schema in tenant space
       ObArray<ObResourcePoolName> pools;
+      CreateNormalTenantContext meta_context(meta_tenant_id, pools, meta_tenant_schema, tenant_role, 
+          recovery_until_scn, meta_sys_variable, false/*create_ls_with_palf*/, meta_palf_base_info, init_configs,
+          arg.is_creating_standby_, arg.log_restore_source_);
+      ObString empty_str;
+      CreateNormalTenantContext user_context(user_tenant_id, pools, user_tenant_schema, tenant_role,
+              recovery_until_scn, user_sys_variable, create_ls_with_palf, user_palf_base_info, init_configs,
+              false /* is_creating_standby */, empty_str);
+
       if (OB_FAIL(get_pools(arg.pool_list_, pools))) {
         LOG_WARN("get_pools failed", KR(ret), K(arg));
-      } else if (OB_FAIL(create_normal_tenant(meta_tenant_id, pools, meta_tenant_schema, tenant_role,
-        recovery_until_scn, meta_sys_variable, false/*create_ls_with_palf*/, meta_palf_base_info, init_configs,
-        arg.is_creating_standby_, arg.log_restore_source_))) {
-        LOG_WARN("fail to create meta tenant", KR(ret), K(meta_tenant_id), K(pools), K(meta_sys_variable),
-            K(tenant_role), K(recovery_until_scn), K(meta_palf_base_info), K(init_configs));
-      } else {
-        ObString empty_str;
-        DEBUG_SYNC(BEFORE_CREATE_USER_TENANT);
-        if (OB_FAIL(create_normal_tenant(user_tenant_id, pools, user_tenant_schema, tenant_role,
-              recovery_until_scn, user_sys_variable, create_ls_with_palf, user_palf_base_info, init_configs,
-              false /* is_creating_standby */, empty_str))) {
-          LOG_WARN("fail to create user tenant", KR(ret), K(user_tenant_id), K(pools), K(user_sys_variable),
-              K(tenant_role), K(recovery_until_scn), K(user_palf_base_info));
-        }
+      } else if (OB_FAIL(create_normal_tenant_parallel(meta_context, user_context))) {
+        LOG_WARN("fail to create tenant", KR(ret));
       }
+      
+      // else if (OB_FAIL(create_normal_tenant(meta_tenant_id, pools, meta_tenant_schema, tenant_role,
+      //   recovery_until_scn, meta_sys_variable, false/*create_ls_with_palf*/, meta_palf_base_info, init_configs,
+      //   arg.is_creating_standby_, arg.log_restore_source_))) {
+      //   LOG_WARN("fail to create meta tenant", KR(ret), K(meta_tenant_id), K(pools), K(meta_sys_variable),
+      //       K(tenant_role), K(recovery_until_scn), K(meta_palf_base_info), K(init_configs));
+      // } else {
+      //   ObString empty_str;
+      //   DEBUG_SYNC(BEFORE_CREATE_USER_TENANT);
+      //   if (OB_FAIL(create_normal_tenant(user_tenant_id, pools, user_tenant_schema, tenant_role,
+      //         recovery_until_scn, user_sys_variable, create_ls_with_palf, user_palf_base_info, init_configs,
+      //         false /* is_creating_standby */, empty_str))) {
+      //     LOG_WARN("fail to create user tenant", KR(ret), K(user_tenant_id), K(pools), K(user_sys_variable),
+      //         K(tenant_role), K(recovery_until_scn), K(user_palf_base_info));
+      //   }
+      // }
+
       // drop tenant if create tenant failed.
       // meta tenant will be force dropped with its user tenant.
       if (OB_FAIL(ret) && tenant_role.is_primary()) {
@@ -22630,6 +22643,90 @@ int ObDDLService::create_normal_tenant(
     LOG_WARN("failed to create tenant user ls", KR(ret), K(tenant_id));
   }
   LOG_INFO("[CREATE_TENANT] STEP 2. finish create tenant", KR(ret), K(tenant_id),
+           "cost", ObTimeUtility::fast_current_time() - start_time);
+  return ret;
+}
+
+int ObDDLService::create_normal_tenant_parallel(
+    CreateNormalTenantContext &meta_context,
+      CreateNormalTenantContext &user_context)
+{
+  const int64_t start_time = ObTimeUtility::fast_current_time();
+  LOG_INFO("[CREATE_TENANT] STEP 2.[p] start create meta tenant", K(meta_context.tenant_id), K(meta_context.tenant_schema));
+  LOG_INFO("[CREATE_TENANT] STEP 2.[p] start create user tenant", K(user_context.tenant_id), K(user_context.tenant_schema));
+  int ret = OB_SUCCESS;
+  ObSArray<ObTableSchema> meta_tables;
+  ObSArray<ObTableSchema> user_tables;
+  if (OB_FAIL(check_inner_stat())) {
+    LOG_WARN("variable is not init", KR(ret));
+  } else if (OB_UNLIKELY(!meta_context.recovery_until_scn.is_valid_and_not_min())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid recovery_until_scn", KR(ret), K(meta_context.recovery_until_scn));
+  } else if (OB_UNLIKELY(!user_context.recovery_until_scn.is_valid_and_not_min())) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("invalid recovery_until_scn", KR(ret), K(user_context.recovery_until_scn));
+  } else if (is_sys_tenant(meta_context.tenant_id)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("tenant_id is invalid", KR(ret), K(meta_context.tenant_id));
+  } else if (is_sys_tenant(user_context.tenant_id)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("tenant_id is invalid", KR(ret), K(user_context.tenant_id));
+  } else if (OB_FAIL(insert_restore_tenant_job(meta_context.tenant_id, meta_context.tenant_schema.get_tenant_name(), meta_context.tenant_role))) {
+    LOG_WARN("failed to insert restore tenant job", KR(ret), K(meta_context.tenant_id), K(meta_context.tenant_role), K(meta_context.tenant_schema));
+  } else if (OB_FAIL(insert_restore_tenant_job(user_context.tenant_id, user_context.tenant_schema.get_tenant_name(),user_context.tenant_role))) {
+    LOG_WARN("failed to insert restore tenant job", KR(ret), K(user_context.tenant_id), K(user_context.tenant_role), K(user_context.tenant_schema));
+  } else if (OB_FAIL(create_tenant_sys_ls(meta_context.tenant_schema, meta_context.pool_list, meta_context.create_ls_with_palf, meta_context.palf_base_info))) {
+    LOG_WARN("fail to create tenant sys log stream", KR(ret), K(meta_context.tenant_schema), K(meta_context.pool_list), K(meta_context.palf_base_info));
+  } else if (OB_FAIL(create_tenant_sys_ls(user_context.tenant_schema, user_context.pool_list, user_context.create_ls_with_palf, user_context.palf_base_info))) {
+    LOG_WARN("fail to create tenant sys log stream", KR(ret), K(user_context.tenant_schema), K(user_context.pool_list), K(user_context.palf_base_info));
+  } else if (is_user_tenant(user_context.tenant_id) && !user_context.tenant_role.is_primary()) {
+    //standby cluster no need create sys tablet and init tenant schema
+
+    // can skip user_context following steps
+    // do meta_context following steps
+    if (OB_FAIL(ObSchemaUtils::construct_inner_table_schemas(meta_context.tenant_id, meta_tables))) {
+      LOG_WARN("fail to get inner table schemas in tenant space", KR(ret), K(meta_context.tenant_id));
+    } else if (OB_FAIL(broadcast_sys_table_schemas(meta_context.tenant_id, meta_tables))) {
+      LOG_WARN("fail to broadcast sys table schemas", KR(ret), K(meta_context.tenant_id));
+    } else if (OB_FAIL(create_tenant_sys_tablets(meta_context.tenant_id, meta_tables))) {
+      LOG_WARN("fail to create tenant partitions", KR(ret), K(meta_context.tenant_id));
+    } else if (OB_FAIL(init_tenant_schema(meta_context.tenant_id, meta_context.tenant_schema,
+              meta_context.tenant_role, meta_context.recovery_until_scn, meta_tables, meta_context.sys_variable, meta_context.init_configs,
+              meta_context.is_creating_standby, meta_context.log_restore_source))) {
+      LOG_WARN("fail to init tenant schema", KR(ret), K(meta_context.tenant_role), K(meta_context.recovery_until_scn),
+              K(meta_context.tenant_id), K(meta_context.tenant_schema), K(meta_context.sys_variable), K(meta_context.init_configs),
+              K(meta_context.is_creating_standby), K(meta_context.log_restore_source));
+    }
+
+  } else if (OB_FAIL(ObSchemaUtils::construct_inner_table_schemas(meta_context.tenant_id, meta_tables))) {
+    LOG_WARN("fail to get inner table schemas in tenant space", KR(ret), K(meta_context.tenant_id));
+  } else if (OB_FAIL(ObSchemaUtils::construct_inner_table_schemas(user_context.tenant_id, user_tables))) {
+    LOG_WARN("fail to get inner table schemas in tenant space", KR(ret), K(user_context.tenant_id));
+  } else if (OB_FAIL(broadcast_sys_table_schemas(meta_context.tenant_id, meta_tables))) {
+    LOG_WARN("fail to broadcast sys table schemas", KR(ret), K(meta_context.tenant_id));
+  } else if (OB_FAIL(broadcast_sys_table_schemas(user_context.tenant_id, user_tables))) {
+    LOG_WARN("fail to broadcast sys table schemas", KR(ret), K(user_context.tenant_id));
+  } else if (OB_FAIL(create_tenant_sys_tablets(meta_context.tenant_id, meta_tables))) {
+    LOG_WARN("fail to create tenant partitions", KR(ret), K(meta_context.tenant_id));
+  } else if (OB_FAIL(create_tenant_sys_tablets(user_context.tenant_id, user_tables))) {
+    LOG_WARN("fail to create tenant partitions", KR(ret), K(user_context.tenant_id));
+  } else if (OB_FAIL(init_tenant_schema(meta_context.tenant_id, meta_context.tenant_schema,
+             meta_context.tenant_role, meta_context.recovery_until_scn, meta_tables, meta_context.sys_variable, meta_context.init_configs,
+             meta_context.is_creating_standby, meta_context.log_restore_source))) {
+    LOG_WARN("fail to init tenant schema", KR(ret), K(meta_context.tenant_role), K(meta_context.recovery_until_scn),
+             K(meta_context.tenant_id), K(meta_context.tenant_schema), K(meta_context.sys_variable), K(meta_context.init_configs),
+             K(meta_context.is_creating_standby), K(meta_context.log_restore_source));
+  } else if (OB_FAIL(init_tenant_schema(user_context.tenant_id, user_context.tenant_schema,
+             user_context.tenant_role, user_context.recovery_until_scn, user_tables, user_context.sys_variable, user_context.init_configs,
+             user_context.is_creating_standby, user_context.log_restore_source))) {
+    LOG_WARN("fail to init tenant schema", KR(ret), K(user_context.tenant_role), K(user_context.recovery_until_scn),
+             K(user_context.tenant_id), K(user_context.tenant_schema), K(user_context.sys_variable), K(user_context.init_configs),
+             K(user_context.is_creating_standby), K(user_context.log_restore_source));
+  } else if (is_user_tenant(user_context.tenant_id) && OB_FAIL(create_tenant_user_ls(user_context.tenant_id))) {
+    //create user ls
+    LOG_WARN("failed to create tenant user ls", KR(ret), K(user_context.tenant_id));
+  }
+  LOG_INFO("[CREATE_TENANT] STEP 2.[p] finish create tenant", KR(ret), K(meta_context.tenant_id), K(user_context.tenant_id),
            "cost", ObTimeUtility::fast_current_time() - start_time);
   return ret;
 }
