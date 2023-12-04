@@ -139,7 +139,7 @@ int ObLogService::start()
     CLOG_LOG(WARN, "failed to start role_change_service_", K(ret));
   } else if (OB_FAIL(cdc_service_.start())) {
     CLOG_LOG(WARN, "failed to start cdc_service_", K(ret));
-  } else if (OB_FAIL(restore_service_.start())) {
+  } else if (!common::is_bootstrap_in_single_mode() && OB_FAIL(restore_service_.start())) {
     CLOG_LOG(WARN, "failed to start restore_service_", K(ret));
 #ifdef OB_BUILD_ARBITRATION
   } else if (OB_FAIL(arb_service_.start())) {
