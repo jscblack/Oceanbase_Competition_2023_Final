@@ -483,20 +483,30 @@ inline bool is_bootstrap_in_single_mode()
   return (env_ && 0 == strcmp("true", env_));
 }
 
+inline bool is_operate_in_single_mode()
+{
+  const char *env_= getenv("SINGLE_OPERATE");
+  return (env_ && 0 == strcmp("true", env_));
+}
+
 struct global_bootstrap_var{
   // 这里逐渐增加
   // bootstrap
 
 
   // create tenant
-  bool is_finish_create_tenant_schema(){
-    return ATOMIC_LOAD(&finish_create_tenant_schema_);
+  bool set_is_create_user_tenant_via_sys(bool new_value){
+    // set env
+    setenv(env_create_user_tenant_via_sys,new_value?"true":"false",1/*replace*/);
+    // is_create_user_tenant_via_sys_ = new_value;
+    return OB_SUCCESS;
   }
-  void set_finish_create_tenant_schema(bool finish){
-    ATOMIC_STORE(&finish_create_tenant_schema_, finish);
+  bool is_create_user_tenant_via_sys(){
+    const char *env_= getenv(env_create_user_tenant_via_sys);
+    return (env_ && 0 == strcmp("true", env_));
   }
 private:
-  bool finish_create_tenant_schema_;
+  const char * env_create_user_tenant_via_sys="CREATE_U_T_V_S";
 };
 
 static global_bootstrap_var GLOBAL_BOOTSTRAP_VAR;

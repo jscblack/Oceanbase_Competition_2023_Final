@@ -1574,7 +1574,16 @@ OB_INLINE uint64_t get_private_table_exec_tenant_id(const uint64_t tenant_id)
   } else if (is_meta_tenant(tenant_id)) {
     ret_tenant_id = OB_SYS_TENANT_ID;
   } else {
-    ret_tenant_id = gen_meta_tenant_id(tenant_id);
+    const char *env1_= getenv("SINGLE_BOOTSTRAP");
+    const char *env2_= getenv("SINGLE_OPERATE");
+    if(env1_ && 0 == strcmp("true", env1_)){
+      ret_tenant_id = OB_SYS_TENANT_ID;// also use sys tenant
+    } else if(env2_ && 0 == strcmp("true", env2_)){
+      ret_tenant_id = OB_SYS_TENANT_ID;// also use sys tenant
+    } else{
+      ret_tenant_id = gen_meta_tenant_id(tenant_id);
+    }
+    // ret_tenant_id = gen_meta_tenant_id(tenant_id);
   }
   return ret_tenant_id;
 }

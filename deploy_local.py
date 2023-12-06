@@ -140,7 +140,7 @@ if __name__ == "__main__":
         "-o",
         dest="opt_str",
         type=str,
-        default="__min_full_resource_pool_memory=1073741824,datafile_size=60G,datafile_next=20G,datafile_maxsize=100G,log_disk_size=40G,memory_limit=10G,system_memory=1G,cpu_count=24,cache_wash_threshold=1G,workers_per_cpu_quota=10,schema_history_expire_time=1d,net_thread_count=4,syslog_io_bandwidth_limit=10G",
+        default="__min_full_resource_pool_memory=1073741824,datafile_size=60G,datafile_next=20G,datafile_maxsize=100G,log_disk_size=40G,memory_limit=10G,system_memory=1G,cpu_count=24,cache_wash_threshold=1G,workers_per_cpu_quota=10,schema_history_expire_time=1d,net_thread_count=4,syslog_io_bandwidth_limit=100G",
     )
 
     tenant_group = parser.add_argument_group("tenant", "tenant options")
@@ -239,6 +239,7 @@ if __name__ == "__main__":
         )
         _logger.info("create tenant done")
         os.environ["SINGLE_BOOTSTRAP"] = "false"
+        os.environ["SINGLE_OPERATE"] = "true"
 
     except mysql.err.Error as e:
         _logger.info("deploy observer failed. ex=%s", str(e))

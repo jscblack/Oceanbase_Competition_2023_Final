@@ -22054,8 +22054,6 @@ int ObDDLService::create_tenant(
   } else if (OB_FAIL(create_tenant_end(user_tenant_id))) {
     LOG_WARN("failed to create tenant end", KR(ret), K(user_tenant_id));
   }
-  // TODO: 取消对ObTenantThreadHelper::wait_tenant_schema_and_version_ready_的阻塞
-  common::GLOBAL_BOOTSTRAP_VAR.set_finish_create_tenant_schema(true);
   if (OB_SUCC(ret)) {
     tenant_id = user_tenant_id;
   }
@@ -22652,6 +22650,77 @@ int ObDDLService::create_normal_tenant_parallel(
       CreateNormalTenantContext &user_context)
 {
   const int64_t start_time = ObTimeUtility::fast_current_time();
+  // before everything start
+  // need to init user tenant status via sys tenant first
+  common::GLOBAL_BOOTSTRAP_VAR.set_is_create_user_tenant_via_sys(true);
+  LOG_INFO("GLOBAL_BOOTSTRAP_VAR",K(common::GLOBAL_BOOTSTRAP_VAR.is_create_user_tenant_via_sys()));
+  {
+    int ret = OB_SUCCESS;
+    const uint64_t tenant_id = meta_context.tenant_id; /*1001*/
+    const ObIArray<share::ObResourcePoolName> &pool_list = meta_context.pool_list;
+    // meta_context.tenant_schema.get_tenant_id
+    const share::schema::ObTenantSchema &tenant_schema = meta_context.tenant_schema;
+    const share::ObTenantRole &tenant_role = meta_context.tenant_role;
+    const SCN &recovery_until_scn = meta_context.recovery_until_scn;
+    ObSysVariableSchema &sys_variable = meta_context.sys_variable;
+    const bool create_ls_with_palf = meta_context.create_ls_with_palf;
+    const palf::PalfBaseInfo &palf_base_info = meta_context.palf_base_info;
+    const common::ObIArray<common::ObConfigPairs> &init_configs = meta_context.init_configs;
+    bool is_creating_standby = meta_context.is_creating_standby;
+    const common::ObString &log_restore_source = meta_context.log_restore_source;
+    // 
+    ObSchemaService *schema_service_impl = schema_service_->get_schema_service();
+    ObDDLSQLTransaction trans(schema_service_, true, true, false, false);
+    const int64_t init_schema_version = tenant_schema.get_schema_version();
+    int64_t new_schema_version = OB_INVALID_VERSION;
+    ObDDLOperator ddl_operator(*schema_service_, *sql_proxy_);
+    const int64_t refreshed_schema_version = 0;
+    if (OB_FAIL(trans.start(sql_proxy_, OB_SYS_TENANT_ID /*1*/, refreshed_schema_version))) {
+      LOG_WARN("fail to start trans", KR(ret), K(tenant_id));
+    // } else if (is_user_tenant(tenant_id) && OB_FAIL(set_sys_ls_status(tenant_id))) {
+    //   LOG_WARN("failed to set sys ls status", KR(ret), K(tenant_id));
+    // } else if (OB_FAIL(schema_service_impl->gen_new_schema_version(
+    //             tenant_id, init_schema_version, new_schema_version))) {
+    // } else if (OB_FAIL(ddl_operator.replace_sys_variable(
+    //             sys_variable, new_schema_version, trans, OB_DDL_ALTER_SYS_VAR))) {
+    //   LOG_WARN("fail to replace sys variable", KR(ret), K(sys_variable));
+    // } else if (OB_FAIL(ddl_operator.init_tenant_env(tenant_schema, sys_variable, tenant_role,
+    //                                                 recovery_until_scn, init_configs, trans))) {
+    //   LOG_WARN("init tenant env failed", KR(ret), K(tenant_role), K(recovery_until_scn), K(tenant_schema));
+    // } else if (OB_FAIL(ddl_operator.insert_tenant_merge_info(OB_DDL_ADD_TENANT_START, tenant_schema, trans))) {
+    //   LOG_WARN("fail to insert tenant merge info", KR(ret), K(tenant_schema));
+    // } else if (true /*is_meta_tenant(tenant_id)*/ && OB_FAIL(ObServiceEpochProxy::init_service_epoch(
+    //     trans,
+    //     tenant_id,
+    //     0, /*freeze_service_epoch*/
+    //     0, /*arbitration_service_epoch*/
+    //     0, /*server_zone_op_service_epoch*/
+    //     0 /*heartbeat_service_epoch*/))) {
+    //   LOG_WARN("fail to init service epoch", KR(ret));
+    // } else if (is_creating_standby && OB_FAIL(set_log_restore_source(/*1002*/gen_user_tenant_id(tenant_id), log_restore_source, trans))) {
+    //   LOG_WARN("fail to set_log_restore_source", KR(ret), K(tenant_id), K(log_restore_source));
+    // }
+    } else if(OB_FAIL(ddl_operator.init_user_tenant_env(OB_SYS_TENANT_ID, tenant_role,
+                                                    recovery_until_scn, init_configs, trans))) {
+      LOG_WARN("init tenant env failed", KR(ret), K(tenant_role), K(recovery_until_scn), K(tenant_schema));
+    }
+    if (trans.is_started()) {
+      int temp_ret = OB_SUCCESS;
+      bool commit = OB_SUCC(ret);
+      if (OB_SUCCESS != (temp_ret = trans.end(commit))) {
+        ret = (OB_SUCC(ret)) ? temp_ret : ret;
+        LOG_WARN("trans end failed", K(commit), K(temp_ret));
+      }
+    }
+  }
+  
+
+
+
+
+
+
+  ////////////////////
   LOG_INFO("[CREATE_TENANT] STEP 2.[p] start create meta tenant", K(meta_context.tenant_id), K(meta_context.tenant_schema));
   LOG_INFO("[CREATE_TENANT] STEP 2.[p] start create user tenant", K(user_context.tenant_id), K(user_context.tenant_schema));
   int ret = OB_SUCCESS;
@@ -23188,6 +23257,8 @@ int ObDDLService::init_tenant_schema(
       if (OB_FAIL(create_sys_table_schemas(tenant_id, tables))) {
         // 先并行建表再启动事务
         LOG_WARN("fail to create sys tables", KR(ret), K(tenant_id));
+      } else if (is_meta_tenant(tenant_id) && OB_FAIL(GLOBAL_BOOTSTRAP_VAR.set_is_create_user_tenant_via_sys(false))){
+        LOG_WARN("fail to set is_create_user_tenant_via_sys", KR(ret), K(tenant_id));
       } else if (OB_FAIL(trans.start(sql_proxy_, tenant_id, refreshed_schema_version))) {
         LOG_WARN("fail to start trans", KR(ret), K(tenant_id));
       } else if (is_user_tenant(tenant_id) && OB_FAIL(set_sys_ls_status(tenant_id))) {

@@ -159,7 +159,7 @@ public:
    * @param[in] tenant_info 
    * @param[in] proxy
    */ 
-  static int init_tenant_info(const ObAllTenantInfo &tenant_info, ObISQLClient *proxy);
+  static int init_tenant_info(const ObAllTenantInfo &tenant_info, ObISQLClient *proxy, const uint64_t exec_tenant_id);
 
   static int is_standby_tenant(
       ObISQLClient *proxy,
