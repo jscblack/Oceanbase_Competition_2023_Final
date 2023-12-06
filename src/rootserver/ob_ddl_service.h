@@ -2061,6 +2061,9 @@ private:
       const common::ObIArray<common::ObConfigPairs> &init_configs,
       bool is_creating_standby,
       const common::ObString &log_restore_source);
+  static int create_normal_tenant(
+      ObDDLService &ddl_service,
+      CreateNormalTenantContext &meta_context);
   int create_normal_tenant_parallel(
       CreateNormalTenantContext &meta_context,
       CreateNormalTenantContext &user_context);

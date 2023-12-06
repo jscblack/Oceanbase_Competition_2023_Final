@@ -433,6 +433,7 @@ static void print_all_thread(const char* desc)
 
 int main(int argc, char *argv[])
 {
+  setenv("SINGLE_OPERATE", "true", 1/*replace*/);
 #ifdef ENABLE_SANITY
   backtrace_symbolize_func = oceanbase::common::backtrace_symbolize;
 #endif
