@@ -177,7 +177,7 @@ void ObDataDictService::runTimerTask()
     const bool is_reach_time_interval = (start_time >= ATOMIC_LOAD(&last_dump_succ_time_) + ATOMIC_LOAD(&dump_interval_));
     const bool force_need_dump = ATOMIC_LOAD(&force_need_dump_);
 
-    if (is_leader && (is_reach_time_interval || force_need_dump)) {
+    if (is_leader && !common::is_bootstrap_in_single_mode() && (is_reach_time_interval || force_need_dump)) {
       int ret = OB_SUCCESS;
       uint64_t data_version = 0;
 
