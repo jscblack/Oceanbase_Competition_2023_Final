@@ -1021,6 +1021,9 @@ int ObTablet::init_empty_shell(
 int ObTablet::check_sstable_column_checksum() const
 {
   int ret = OB_SUCCESS;
+  if(common::is_bootstrap_in_single_mode()){
+    return ret;
+  }
   common::ObArenaAllocator allocator(common::ObMemAttr(MTL_ID(), "CKColCKS"));
   const ObStorageSchema *storage_schema = nullptr;
   ObTableStoreIterator iter;
