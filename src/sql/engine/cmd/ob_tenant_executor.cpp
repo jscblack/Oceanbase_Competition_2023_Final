@@ -105,6 +105,7 @@ int ObCreateTenantExecutor::execute(ObExecContext &ctx, ObCreateTenantStmt &stmt
   }
   LOG_INFO("[CREATE TENANT] create tenant", KR(ret), K(create_tenant_arg),
            "cost", ObTimeUtility::current_time() - start_ts);
+  GCTX.status_ = observer::SS_SERVING;
   return ret;
 }
 

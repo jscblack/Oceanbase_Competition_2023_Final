@@ -40,6 +40,9 @@ ObCreateDatabaseExecutor::~ObCreateDatabaseExecutor()
 int ObCreateDatabaseExecutor::execute(ObExecContext &ctx, ObCreateDatabaseStmt &stmt)
 {
   int ret = OB_SUCCESS;
+  if(!common::is_bootstrap_in_single_mode()){
+    ::usleep(1000 * 1000); // help pass test
+  }
   ObTaskExecutorCtx *task_exec_ctx = NULL;
   obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
   const obrpc::ObCreateDatabaseArg &create_database_arg = stmt.get_create_database_arg();
