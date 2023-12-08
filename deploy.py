@@ -185,6 +185,7 @@ if __name__ == "__main__":
                         "enable_rereplication=False,"
                         "enable_rebalance=False,"
                         "enable_tcp_keepalive=False,"
+                        "enable_perf_event=False,"
                         "rootservice_ready_check_interval=100000us,"
                         "lease_time=1s,"
                         "server_check_interval=30s,"
