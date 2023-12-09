@@ -1142,6 +1142,30 @@ int ObCreateTenantArg::assign(const ObCreateTenantArg &other)
   return ret;
 }
 
+// int ObCreateTenantArg::assign(ObCreateTenantArg other)
+// {
+//   int ret = OB_SUCCESS;
+//   if (OB_FAIL(ObDDLArg::assign(other))) {
+//     LOG_WARN("fail to assign ddl arg", KR(ret));
+//   } else if (OB_FAIL(tenant_schema_.assign(other.tenant_schema_))) {
+//     LOG_WARN("fail to assign tenant schema", K(ret), K(other));
+//   } else if (OB_FAIL(pool_list_.assign(other.pool_list_))) {
+//     LOG_WARN("fail to assign pool list", K(ret), K(other));
+//   } else if (OB_FAIL(sys_var_list_.assign(other.sys_var_list_))) {
+//     LOG_WARN("fail to assign sys var list", K(ret), K(other));
+//   } else {
+//     if_not_exist_ = other.if_not_exist_;
+//     name_case_mode_ = other.name_case_mode_;
+//     is_restore_ = other.is_restore_;
+//     palf_base_info_ = other.palf_base_info_;
+//     recovery_until_scn_ = other.recovery_until_scn_;
+//     compatible_version_ = other.compatible_version_;
+//     is_creating_standby_ = other.is_creating_standby_;
+//     log_restore_source_ = other.log_restore_source_;
+//     is_tmp_tenant_for_recover_ = other.is_tmp_tenant_for_recover_;
+//   }
+//   return ret;
+// }
 void ObCreateTenantArg::reset()
 {
   ObDDLArg::reset();

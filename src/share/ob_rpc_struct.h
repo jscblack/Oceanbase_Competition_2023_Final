@@ -515,6 +515,7 @@ public:
   int check_valid() const;
   void reset();
   int assign(const ObCreateTenantArg &other);
+  // int assign(ObCreateTenantArg other);
 
   virtual bool is_allow_in_standby() const { return sync_from_primary_; }
   int init(const share::schema::ObTenantSchema &tenant_schema,

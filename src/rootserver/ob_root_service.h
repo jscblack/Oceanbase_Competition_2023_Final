@@ -261,6 +261,24 @@ public:
     DISALLOW_COPY_AND_ASSIGN(ObReloadUnitManagerTask);
   };
 
+  class ObCreateTenantTask : public common::ObAsyncTimerTask
+  {
+  public:
+    explicit ObCreateTenantTask(ObRootService &root_service, const obrpc::ObCreateTenantArg &arg, obrpc::UInt64 &tenant_id);
+    explicit ObCreateTenantTask(ObRootService &root_service, obrpc::ObCreateTenantArg arg, obrpc::UInt64 tenant_id);
+    virtual ~ObCreateTenantTask() {}
+  public:
+    // interface of AsyncTask
+    virtual int process() override;
+    virtual int64_t get_deep_copy_size() const override { return sizeof(*this); }
+    virtual ObAsyncTask *deep_copy(char *buf, const int64_t buf_size) const override;
+  private:
+    ObRootService &root_service_;
+    obrpc::ObCreateTenantArg arg_;
+    obrpc::UInt64 tenant_id_;
+    DISALLOW_COPY_AND_ASSIGN(ObCreateTenantTask);
+  };
+
   class ObLoadDDLTask : public common::ObAsyncTimerTask
   {
   public:
@@ -737,6 +755,7 @@ public:
   int submit_offline_server_task(const common::ObAddr &server);
   int submit_report_core_table_replica_task();
   int submit_reload_unit_manager_task();
+  int submit_create_tenant_task(const obrpc::ObCreateTenantArg &arg, obrpc::UInt64 &tenant_id);
   int report_replica();
   int report_single_replica(const int64_t tenant_id, const share::ObLSID &ls_id);
   // @see RsListChangeCb

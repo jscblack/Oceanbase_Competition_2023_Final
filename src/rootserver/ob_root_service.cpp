@@ -1709,6 +1709,25 @@ int ObRootService::submit_reload_unit_manager_task()
   return ret;
 }
 
+int ObRootService::submit_create_tenant_task(const obrpc::ObCreateTenantArg &arg, obrpc::UInt64 &tenant_id){
+  // make create tenant a async task
+  int ret = OB_SUCCESS;
+  obrpc::ObCreateTenantArg *create_tenant_arg_ptr = new obrpc::ObCreateTenantArg();
+  create_tenant_arg_ptr->assign(arg);
+  if (OB_UNLIKELY(!inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else {
+    ObCreateTenantTask task(*this, arg, tenant_id);
+    if (OB_FAIL(task_queue_.add_async_task(task))) {
+      LOG_WARN("inner queue push reload_unit task failed", K(ret));
+    } else {
+      LOG_INFO("submit create tenant task success", K(ret));
+    }
+  }
+  return ret;
+}
+
 int ObRootService::schedule_restart_timer_task(const int64_t delay)
 {
   int ret = OB_SUCCESS;
@@ -2714,27 +2733,30 @@ int ObRootService::check_tenant_in_alter_locality(
 
 int ObRootService::create_tenant(const ObCreateTenantArg &arg, UInt64 &tenant_id)
 {
-  LOG_INFO("receive create tenant arg", K(arg), "timeout_ts", THIS_WORKER.get_timeout_ts());
-  int ret = OB_SUCCESS;
-  int tmp_ret = OB_SUCCESS;
-  const ObString &tenant_name = arg.tenant_schema_.get_tenant_name_str();
-  // when recovering table, it needs to create tmp tenant
-  const bool tmp_tenant = arg.is_tmp_tenant_for_recover_;
-  if (!inited_) {
-    ret = OB_NOT_INIT;
-    LOG_WARN("not init", KR(ret));
-  } else if (!tmp_tenant && OB_FAIL(ObResolverUtils::check_not_supported_tenant_name(tenant_name))) {
-    LOG_WARN("unsupported tenant name", KR(ret), K(tenant_name));
-  } else if (OB_FAIL(ddl_service_.create_tenant(arg, tenant_id))) {
-    LOG_WARN("fail to create tenant", KR(ret), K(arg));
-    if (OB_TMP_FAIL(submit_reload_unit_manager_task())) {
-      if (OB_CANCELED != tmp_ret) {
-        LOG_ERROR("fail to reload unit_mgr, please try 'alter system reload unit'", KR(ret), KR(tmp_ret));
-      }
-    }
-  } else {}
-  LOG_INFO("finish create tenant", KR(ret), K(tenant_id), K(arg), "timeout_ts", THIS_WORKER.get_timeout_ts());
-  return ret;
+  // create async task here
+  return submit_create_tenant_task(arg, tenant_id);
+  
+  // LOG_INFO("receive create tenant arg", K(arg), "timeout_ts", THIS_WORKER.get_timeout_ts());
+  // int ret = OB_SUCCESS;
+  // int tmp_ret = OB_SUCCESS;
+  // const ObString &tenant_name = arg.tenant_schema_.get_tenant_name_str();
+  // // when recovering table, it needs to create tmp tenant
+  // const bool tmp_tenant = arg.is_tmp_tenant_for_recover_;
+  // if (!inited_) {
+  //   ret = OB_NOT_INIT;
+  //   LOG_WARN("not init", KR(ret));
+  // } else if (!tmp_tenant && OB_FAIL(ObResolverUtils::check_not_supported_tenant_name(tenant_name))) {
+  //   LOG_WARN("unsupported tenant name", KR(ret), K(tenant_name));
+  // } else if (OB_FAIL(ddl_service_.create_tenant(arg, tenant_id))) {
+  //   LOG_WARN("fail to create tenant", KR(ret), K(arg));
+  //   if (OB_TMP_FAIL(submit_reload_unit_manager_task())) {
+  //     if (OB_CANCELED != tmp_ret) {
+  //       LOG_ERROR("fail to reload unit_mgr, please try 'alter system reload unit'", KR(ret), KR(tmp_ret));
+  //     }
+  //   }
+  // } else {}
+  // LOG_INFO("finish create tenant", KR(ret), K(tenant_id), K(arg), "timeout_ts", THIS_WORKER.get_timeout_ts());
+  // return ret;
 }
 
 int ObRootService::create_tenant_end(const ObCreateTenantEndArg &arg)
@@ -9126,6 +9148,66 @@ ObAsyncTask *ObRootService::ObReloadUnitManagerTask::deep_copy(char *buf, const 
   return task;
 }
 
+//////////////ObCreateTenantTask
+ObRootService::ObCreateTenantTask::ObCreateTenantTask(ObRootService &root_service, 
+    const obrpc::ObCreateTenantArg &arg, 
+    obrpc::UInt64 &tenant_id)
+: ObAsyncTimerTask(root_service.task_queue_),
+    root_service_(root_service)
+{
+  arg_.assign(arg);
+  tenant_id_ = tenant_id;
+  set_retry_times(INT64_MAX); // retry until success
+}
+
+ObRootService::ObCreateTenantTask::ObCreateTenantTask(ObRootService &root_service, 
+    obrpc::ObCreateTenantArg arg,
+    obrpc::UInt64 tenant_id)
+: ObAsyncTimerTask(root_service.task_queue_),
+    root_service_(root_service)
+{
+  arg_.assign(arg);
+  tenant_id_ = tenant_id;
+  set_retry_times(INT64_MAX); // retry until success
+}
+
+int ObRootService::ObCreateTenantTask::process()
+{
+  // do create tenant here, and not wait out side
+  LOG_INFO("receive create tenant arg", K(arg_), "timeout_ts", THIS_WORKER.get_timeout_ts());
+  int ret = OB_SUCCESS;
+  int tmp_ret = OB_SUCCESS;
+  const ObString &tenant_name = arg_.tenant_schema_.get_tenant_name_str();
+  // when recovering table, it needs to create tmp tenant
+  const bool tmp_tenant = arg_.is_tmp_tenant_for_recover_;
+  if (!root_service_.inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", KR(ret));
+  } else if (!tmp_tenant && OB_FAIL(ObResolverUtils::check_not_supported_tenant_name(tenant_name))) {
+    LOG_WARN("unsupported tenant name", KR(ret), K(tenant_name));
+  } else if (OB_FAIL(root_service_.ddl_service_.create_tenant(arg_, tenant_id_))) {
+    LOG_WARN("fail to create tenant", KR(ret), K(arg_));
+    if (OB_TMP_FAIL(root_service_.submit_reload_unit_manager_task())) {
+      if (OB_CANCELED != tmp_ret) {
+        LOG_ERROR("fail to reload unit_mgr, please try 'alter system reload unit'", KR(ret), KR(tmp_ret));
+      }
+    }
+  } else {}
+  LOG_INFO("finish create tenant", KR(ret), K(tenant_id_), K(arg_), "timeout_ts", THIS_WORKER.get_timeout_ts());
+  return ret;
+}
+
+ObAsyncTask *ObRootService::ObCreateTenantTask::deep_copy(char *buf, const int64_t buf_size) const
+{
+  ObCreateTenantTask *task = NULL;
+  if (NULL == buf || buf_size < static_cast<int64_t>(sizeof(*this))) {
+    LOG_WARN_RET(OB_BUF_NOT_ENOUGH, "buffer not large enough", K(buf_size), KP(buf));
+  } else {
+    task = new (buf) ObCreateTenantTask(root_service_, arg_, tenant_id_);
+  }
+  return task;
+}
+//////////////ObCreateTenantTask--END
 ObRootService::ObLoadDDLTask::ObLoadDDLTask(ObRootService &root_service)
   : ObAsyncTimerTask(root_service.task_queue_), root_service_(root_service)
 {
