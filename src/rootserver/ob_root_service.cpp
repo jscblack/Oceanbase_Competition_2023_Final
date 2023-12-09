@@ -9170,6 +9170,123 @@ ObRootService::ObCreateTenantTask::ObCreateTenantTask(ObRootService &root_servic
 //   tenant_id_ = tenant_id;
 //   set_retry_times(INT64_MAX); // retry until success
 // }
+int ObRootService::ObCreateTenantTask::wait_schema_refreshed_(const uint64_t tenant_id)
+{
+  int ret = OB_SUCCESS;
+  int64_t start_ts = ObTimeUtility::current_time();
+  bool is_dropped = false;
+  const uint64_t user_tenant_id = gen_user_tenant_id(tenant_id);
+  const uint64_t meta_tenant_id = gen_meta_tenant_id(tenant_id);
+  int64_t user_schema_version = OB_INVALID_VERSION;
+  int64_t meta_schema_version = OB_INVALID_VERSION;
+  while (OB_SUCC(ret)) {
+    if (THIS_WORKER.is_timeout()) {
+      ret = OB_TIMEOUT;
+      LOG_WARN("failed to wait user ls valid", KR(ret));
+    } else if (OB_FAIL(GSCHEMASERVICE.check_if_tenant_has_been_dropped(meta_tenant_id, is_dropped))) {
+      LOG_WARN("meta tenant has been dropped", KR(ret), K(meta_tenant_id));
+    } else if (is_dropped) {
+      ret = OB_TENANT_HAS_BEEN_DROPPED;
+      LOG_WARN("meta tenant has been dropped", KR(ret), K(meta_tenant_id));
+    } else if (OB_FAIL(GSCHEMASERVICE.check_if_tenant_has_been_dropped(user_tenant_id, is_dropped))) {
+      LOG_WARN("user tenant has been dropped", KR(ret), K(user_tenant_id));
+    } else if (is_dropped) {
+      ret = OB_TENANT_HAS_BEEN_DROPPED;
+      LOG_WARN("user tenant has been dropped", KR(ret), K(user_tenant_id));
+    } else {
+      int tmp_ret = OB_SUCCESS;
+      if (OB_TMP_FAIL(GSCHEMASERVICE.get_tenant_refreshed_schema_version(
+          meta_tenant_id, meta_schema_version))) {
+        if (OB_ENTRY_NOT_EXIST != tmp_ret) {
+          ret = tmp_ret;
+          LOG_WARN("get refreshed schema version failed", KR(ret), K(meta_tenant_id));
+        }
+      } else if (OB_TMP_FAIL(GSCHEMASERVICE.get_tenant_refreshed_schema_version(
+          user_tenant_id, user_schema_version))) {
+        if (OB_ENTRY_NOT_EXIST != tmp_ret) {
+          ret = tmp_ret;
+          LOG_WARN("get refreshed schema version failed", KR(ret), K(user_tenant_id));
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (ObSchemaService::is_formal_version(meta_schema_version)
+                 && ObSchemaService::is_formal_version(user_schema_version)) {
+        break;
+      } else {
+        const int64_t INTERVAL = common::is_bootstrap_in_single_mode()?100 * 1000L:500 * 1000L; // 100ms/500ms
+        LOG_INFO("wait schema refreshed", K(tenant_id), K(meta_schema_version), K(user_schema_version));
+        ob_usleep(INTERVAL);
+      }
+    }
+  }
+  LOG_INFO("[CREATE TENANT] wait schema refreshed", KR(ret), K(tenant_id),
+           "cost", ObTimeUtility::current_time() - start_ts);
+  return ret;
+}
+
+int ObRootService::ObCreateTenantTask::wait_user_ls_valid_(const uint64_t tenant_id)
+{
+  int ret = OB_SUCCESS;
+  int64_t start_ts = ObTimeUtility::current_time();
+  if (OB_ISNULL(GCTX.sql_proxy_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("sql_proxy is null", KR(ret), K(tenant_id));
+  } else if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("tenant id is invalid", KR(ret), K(tenant_id));
+  } else {
+    bool user_ls_valid = false;
+    ObLSStatusOperator status_op;
+    ObLSStatusInfoArray ls_array;
+    ObLSID ls_id;
+    //wait user ls create success
+    while (OB_SUCC(ret) && !user_ls_valid) {
+      ls_array.reset();
+      if (THIS_WORKER.is_timeout()) {
+        ret = OB_TIMEOUT;
+        LOG_WARN("failed to wait user ls valid", KR(ret));
+      } else if (OB_FAIL(status_op.get_all_ls_status_by_order(tenant_id, ls_array, *GCTX.sql_proxy_))) {
+        LOG_WARN("failed to get ls status", KR(ret), K(tenant_id));
+      } else {
+        for (int64_t i = 0; OB_SUCC(ret) && i < ls_array.count() && !user_ls_valid; ++i) {
+          const ObLSStatusInfo &ls_status = ls_array.at(i);
+          if (!ls_status.ls_id_.is_sys_ls() && ls_status.ls_is_normal()) {
+            user_ls_valid = true;
+            ls_id = ls_status.ls_id_;
+          }
+        }//end for
+      }
+      if (OB_FAIL(ret)) {
+      } else if (user_ls_valid) {
+      } else {
+        const int64_t INTERVAL = common::is_bootstrap_in_single_mode()?100 * 1000L:500 * 1000L; // 100ms/500ms
+        LOG_INFO("wait user ls valid", KR(ret), K(tenant_id));
+        ob_usleep(INTERVAL);
+      }
+    }// end while
+    LOG_INFO("[CREATE TENANT] wait user ls created", KR(ret), K(tenant_id),
+             "cost", ObTimeUtility::current_time() - start_ts);
+
+    if (OB_SUCC(ret)) {
+      start_ts = ObTimeUtility::current_time();
+      //wait user ls election
+      if (OB_ISNULL(GCTX.lst_operator_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("ls operator is null", KR(ret));
+      } else {
+        volatile bool stopped = false;
+        share::ObLSLeaderElectionWaiter ls_leader_waiter(*GCTX.lst_operator_, stopped);
+        const int64_t timeout = THIS_WORKER.get_timeout_remain();
+        if (OB_FAIL(ls_leader_waiter.wait(tenant_id, ls_id, timeout))) {
+          LOG_WARN("fail to wait election leader", KR(ret), K(tenant_id), K(ls_id), K(timeout));
+        }
+      }
+      LOG_INFO("[CREATE TENANT] wait user ls election result", KR(ret), K(tenant_id),
+               "cost", ObTimeUtility::current_time() - start_ts);
+    }
+  }
+  return ret;
+}
 
 int ObRootService::ObCreateTenantTask::process()
 {
@@ -9194,9 +9311,16 @@ int ObRootService::ObCreateTenantTask::process()
     }
   } else {}
   LOG_INFO("finish create tenant", KR(ret), K(tenant_id_), K(arg_), "timeout_ts", THIS_WORKER.get_timeout_ts());
-  usleep(500 * 1000); // wait tenant and refresh
-  GCTX.status_ = observer::SS_SERVING;
-  setenv("SINGLE_BOOTSTRAP", "false", 1/*replace*/); // pull this env to here, since when python finish, the tenant processing is still on
+  if (OB_INVALID_ID != tenant_id_) {
+    int tmp_ret = OB_SUCCESS; // try refresh schema and wait ls valid
+    if (OB_TMP_FAIL(wait_schema_refreshed_(tenant_id_))) {
+      LOG_WARN("fail to wait schema refreshed", KR(tmp_ret), K(tenant_id_));
+    } else if (OB_TMP_FAIL(wait_user_ls_valid_(tenant_id_))) {
+      LOG_WARN("failed to wait user ls valid, but ignore", KR(tmp_ret), K(tenant_id_));
+    }
+    GCTX.status_ = observer::SS_SERVING;
+    setenv("SINGLE_BOOTSTRAP", "false", 1/*replace*/); // pull this env to here, since when python finish, the tenant processing is still on
+  }
   LOG_INFO("finish create tenant, after wait", KR(ret), K(tenant_id_));
   return ret;
 }

@@ -240,8 +240,6 @@ if __name__ == "__main__":
             tenant_name=args.tenant_name,
         )
         _logger.info("create tenant done")
-        os.environ["SINGLE_BOOTSTRAP"] = "false"
-        os.environ["SINGLE_OPERATE"] = "true"
 
     except mysql.err.Error as e:
         _logger.info("deploy observer failed. ex=%s", str(e))

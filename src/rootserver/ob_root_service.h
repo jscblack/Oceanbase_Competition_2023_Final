@@ -273,6 +273,8 @@ public:
     virtual int64_t get_deep_copy_size() const override { return sizeof(*this); }
     virtual ObAsyncTask *deep_copy(char *buf, const int64_t buf_size) const override;
   private:
+    int wait_schema_refreshed_(const uint64_t tenant_id);
+    int wait_user_ls_valid_(const uint64_t tenant_id);
     ObRootService &root_service_;
     obrpc::ObCreateTenantArg arg_;
     obrpc::UInt64 tenant_id_;

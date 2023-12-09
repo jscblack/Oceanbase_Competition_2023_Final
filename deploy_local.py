@@ -241,8 +241,6 @@ if __name__ == "__main__":
             tenant_name=args.tenant_name,
         )
         _logger.info("create tenant done")
-        os.environ["SINGLE_BOOTSTRAP"] = "false"
-        os.environ["SINGLE_OPERATE"] = "true"
         _logger.info(
             "total time: %s ms !"
             % ((datetime.datetime.now() - start_time).total_seconds() * 1000)

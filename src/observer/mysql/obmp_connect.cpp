@@ -316,7 +316,7 @@ int ObMPConnect::process()
       LOG_WARN("connection fail at obsm_handle process", K(conn->ret_));
     } else if (OB_FAIL(get_user_tenant(*conn))) {
       LOG_WARN("get user name and tenant name failed", K(ret));
-    } else if ((SS_INIT == GCTX.status_ || SS_STARTING == GCTX.status_)
+    } /*else if ((SS_INIT == GCTX.status_ || SS_STARTING == GCTX.status_)
                && !tenant_name_.empty()
                && 0 != tenant_name_.compare(OB_SYS_TENANT_NAME)) {
       // accept system tenant for bootstrap, do not let other users login before observer start service
@@ -326,7 +326,7 @@ int ObMPConnect::process()
       ret = OB_SUCCESS;
       usleep(1000 * 1000);
       LOG_WARN("server was initializing, but up now", K(ret));
-    } if (SS_STOPPING == GCTX.status_) {
+    }*/ if (SS_STOPPING == GCTX.status_) {
       ret = OB_SERVER_IS_STOPPING;
       LOG_WARN("server is stopping", K(ret));
     } else if (OB_FAIL(check_update_tenant_id(*conn, tenant_id))) {
