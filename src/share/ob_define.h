@@ -489,6 +489,12 @@ inline bool is_operate_in_single_mode()
   return (env_ && 0 == strcmp("true", env_));
 }
 
+inline bool is_single_delay_conn()
+{
+  const char *env_= getenv("SINGLE_DELAY_CONN");
+  return (env_ && 0 == strcmp("true", env_));
+}
+
 struct global_bootstrap_var{
   // 这里逐渐增加
   // bootstrap

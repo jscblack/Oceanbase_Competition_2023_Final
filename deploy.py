@@ -103,6 +103,7 @@ def __create_tenant(
 
 
 if __name__ == "__main__":
+    start_time=datetime.datetime.now()
     log_level = logging.INFO
     log_format = (
         "%(asctime)s.%(msecs)03d [%(levelname)-5s] - %(message)s "
@@ -188,7 +189,7 @@ if __name__ == "__main__":
                         "enable_perf_event=False,"
                         "enable_sql_operator_dump=False,"
                         "rootservice_ready_check_interval=100000us,"
-                        "lease_time=1s,"
+                        "lease_time=10s,"
                         "server_check_interval=30s,"
                         "plan_cache_evict_interval=30s,"
                         "virtual_table_location_cache_expire_time=30s,"
@@ -240,7 +241,11 @@ if __name__ == "__main__":
             tenant_name=args.tenant_name,
         )
         _logger.info("create tenant done")
-
+        os.environ["SINGLE_DELAY_CONN"] = "true"
+        _logger.info(
+            "total time: %s ms !"
+            % ((datetime.datetime.now() - start_time).total_seconds() * 1000)
+        )
     except mysql.err.Error as e:
         _logger.info("deploy observer failed. ex=%s", str(e))
         _logger.info(traceback.format_exc())

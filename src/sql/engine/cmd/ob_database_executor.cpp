@@ -40,8 +40,9 @@ ObCreateDatabaseExecutor::~ObCreateDatabaseExecutor()
 int ObCreateDatabaseExecutor::execute(ObExecContext &ctx, ObCreateDatabaseStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  if(!common::is_bootstrap_in_single_mode()){
-    ::usleep(1000 * 1000); // help pass test
+  if(common::is_single_delay_conn()){
+    ::usleep(1000 * 1000);
+    setenv("SINGLE_DELAY_CONN", "false", 1/*replace*/);
   }
   ObTaskExecutorCtx *task_exec_ctx = NULL;
   obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;

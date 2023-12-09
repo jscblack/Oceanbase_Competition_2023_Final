@@ -9313,7 +9313,6 @@ int ObRootService::ObCreateTenantTask::process()
       LOG_WARN("failed to wait user ls valid, but ignore", KR(tmp_ret), K(tenant_id_));
     }
     GCTX.status_ = observer::SS_SERVING;
-    setenv("SINGLE_BOOTSTRAP", "false", 1/*replace*/); // pull this env to here, since when python finish, the tenant processing is still on
   }
   LOG_INFO("finish create tenant, after wait", KR(ret), K(tenant_id_));
   return ret;
