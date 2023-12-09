@@ -264,8 +264,7 @@ public:
   class ObCreateTenantTask : public common::ObAsyncTimerTask
   {
   public:
-    explicit ObCreateTenantTask(ObRootService &root_service, obrpc::ObCreateTenantArg &arg, obrpc::UInt64 &tenant_id);
-    // explicit ObCreateTenantTask(ObRootService &root_service, obrpc::ObCreateTenantArg arg, obrpc::UInt64 tenant_id);
+    explicit ObCreateTenantTask(ObRootService &root_service, const obrpc::ObCreateTenantArg &arg, obrpc::UInt64 &tenant_id, ObCurTraceId::TraceId trace_id);
     virtual ~ObCreateTenantTask() {}
   public:
     // interface of AsyncTask
@@ -278,6 +277,7 @@ public:
     ObRootService &root_service_;
     obrpc::ObCreateTenantArg arg_;
     obrpc::UInt64 tenant_id_;
+    ObCurTraceId::TraceId trace_id_;
     DISALLOW_COPY_AND_ASSIGN(ObCreateTenantTask);
   };
 
@@ -757,7 +757,7 @@ public:
   int submit_offline_server_task(const common::ObAddr &server);
   int submit_report_core_table_replica_task();
   int submit_reload_unit_manager_task();
-  int submit_create_tenant_task(obrpc::ObCreateTenantArg &arg, obrpc::UInt64 &tenant_id);
+  int submit_create_tenant_task(const obrpc::ObCreateTenantArg &arg, obrpc::UInt64 &tenant_id);
   int report_replica();
   int report_single_replica(const int64_t tenant_id, const share::ObLSID &ls_id);
   // @see RsListChangeCb

@@ -244,6 +244,7 @@ public:
   virtual bool is_allow_in_standby() const
   { return !is_user_tenant(exec_tenant_id_); }
   virtual int assign(const ObDDLArg &other);
+  virtual int deepcopy_assign(const ObDDLArg &other);
   virtual bool contain_sensitive_data() const { return false; }
   void reset()
   {
@@ -515,7 +516,7 @@ public:
   int check_valid() const;
   void reset();
   int assign(const ObCreateTenantArg &other);
-  // int assign(ObCreateTenantArg other);
+  int deepcopy_assign(const ObCreateTenantArg &other);
 
   virtual bool is_allow_in_standby() const { return sync_from_primary_; }
   int init(const share::schema::ObTenantSchema &tenant_schema,

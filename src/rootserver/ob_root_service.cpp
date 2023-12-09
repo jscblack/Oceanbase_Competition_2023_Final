@@ -1709,16 +1709,15 @@ int ObRootService::submit_reload_unit_manager_task()
   return ret;
 }
 
-int ObRootService::submit_create_tenant_task(obrpc::ObCreateTenantArg &arg, obrpc::UInt64 &tenant_id){
+int ObRootService::submit_create_tenant_task(const obrpc::ObCreateTenantArg &arg, obrpc::UInt64 &tenant_id){
   // make create tenant a async task
   int ret = OB_SUCCESS;
-  obrpc::ObCreateTenantArg *create_tenant_arg_ptr = new obrpc::ObCreateTenantArg();
-  create_tenant_arg_ptr->assign(arg);
   if (OB_UNLIKELY(!inited_)) {
     ret = OB_NOT_INIT;
     LOG_WARN("not init", K(ret));
   } else {
-    ObCreateTenantTask task(*this, arg, tenant_id);
+    ObCurTraceId::TraceId *cur_trace_id = ObCurTraceId::get_trace_id();
+    ObCreateTenantTask task(*this, arg, tenant_id, *cur_trace_id);
     if (OB_FAIL(task_queue_.add_async_task(task))) {
       LOG_WARN("inner queue push reload_unit task failed", K(ret));
     } else {
@@ -9150,26 +9149,20 @@ ObAsyncTask *ObRootService::ObReloadUnitManagerTask::deep_copy(char *buf, const 
 
 //////////////ObCreateTenantTask
 ObRootService::ObCreateTenantTask::ObCreateTenantTask(ObRootService &root_service, 
-    obrpc::ObCreateTenantArg &arg, 
-    obrpc::UInt64 &tenant_id)
+    const obrpc::ObCreateTenantArg &arg, 
+    obrpc::UInt64 &tenant_id,
+    ObCurTraceId::TraceId trace_id)
 : ObAsyncTimerTask(root_service.task_queue_),
     root_service_(root_service)
 {
-  arg_.assign(arg);
+  // must deep copy obrpc::ObCreateTenantArg here
+  arg_.deepcopy_assign(arg);
   tenant_id_ = tenant_id;
+  trace_id_ = trace_id;
   set_retry_times(INT64_MAX); // retry until success
+  LOG_INFO("init ObCreateTenantTask", K(arg_));
 }
 
-// ObRootService::ObCreateTenantTask::ObCreateTenantTask(ObRootService &root_service, 
-//     obrpc::ObCreateTenantArg arg,
-//     obrpc::UInt64 tenant_id)
-// : ObAsyncTimerTask(root_service.task_queue_),
-//     root_service_(root_service)
-// {
-//   arg_.assign(arg);
-//   tenant_id_ = tenant_id;
-//   set_retry_times(INT64_MAX); // retry until success
-// }
 int ObRootService::ObCreateTenantTask::wait_schema_refreshed_(const uint64_t tenant_id)
 {
   int ret = OB_SUCCESS;
@@ -9291,6 +9284,7 @@ int ObRootService::ObCreateTenantTask::wait_user_ls_valid_(const uint64_t tenant
 int ObRootService::ObCreateTenantTask::process()
 {
   // do create tenant here, and not wait out side
+  ObCurTraceId::set(trace_id_);
   LOG_INFO("receive create tenant arg", K(arg_), "timeout_ts", THIS_WORKER.get_timeout_ts());
   int ret = OB_SUCCESS;
   int tmp_ret = OB_SUCCESS;
@@ -9331,8 +9325,8 @@ ObAsyncTask *ObRootService::ObCreateTenantTask::deep_copy(char *buf, const int64
   if (NULL == buf || buf_size < static_cast<int64_t>(sizeof(*this))) {
     LOG_WARN_RET(OB_BUF_NOT_ENOUGH, "buffer not large enough", K(buf_size), KP(buf));
   } else {
-    const obrpc::ObCreateTenantArg &create_tenant_arg = const_cast<obrpc::ObCreateTenantArg&>(arg_);
-    task = new (buf) ObCreateTenantTask(root_service_, const_cast<obrpc::ObCreateTenantArg&>(create_tenant_arg), const_cast<obrpc::UInt64&>(tenant_id_));
+    const obrpc::ObCreateTenantArg &create_tenant_arg = arg_;
+    task = new (buf) ObCreateTenantTask(root_service_, create_tenant_arg, const_cast<obrpc::UInt64&>(tenant_id_), trace_id_);
   }
   return task;
 }

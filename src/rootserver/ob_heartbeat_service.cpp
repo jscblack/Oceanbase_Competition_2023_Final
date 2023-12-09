@@ -201,9 +201,9 @@ void ObHeartbeatService::do_work()
           }
         }
         if(OB_FAIL(ret)) {
-          idle(single_bootstrap?HB_FAILED_IDLE_TIME_US/10:HB_FAILED_IDLE_TIME_US);
+          idle(single_bootstrap?HB_FAILED_IDLE_TIME_US*10:HB_FAILED_IDLE_TIME_US);
         } else {
-          idle(single_bootstrap?HB_IDLE_TIME_US/10:HB_IDLE_TIME_US);
+          idle(single_bootstrap?HB_IDLE_TIME_US*10:HB_IDLE_TIME_US);
         }
       }
     } // end while

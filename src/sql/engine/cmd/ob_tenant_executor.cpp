@@ -91,14 +91,11 @@ int ObCreateTenantExecutor::execute(ObExecContext &ctx, ObCreateTenantStmt &stmt
     ret = OB_NOT_INIT;
     LOG_WARN("get common rpc proxy failed");
   } else if(common::is_bootstrap_in_single_mode()){
-    obrpc::ObCreateTenantArg *create_tenant_arg_ptr = new obrpc::ObCreateTenantArg();
-    create_tenant_arg_ptr->assign(create_tenant_arg);
-    obrpc::UInt64 *tenant_id_ptr = new obrpc::UInt64(0);
     LOG_INFO("send rpc proxy create tenant", K(create_tenant_arg));
-    if (OB_FAIL(common_rpc_proxy->create_tenant(*create_tenant_arg_ptr, *tenant_id_ptr))) {
+    if (OB_FAIL(common_rpc_proxy->create_tenant(create_tenant_arg, tenant_id))) {
       LOG_WARN("rpc proxy create tenant failed", K(ret));
     }
-    usleep(2500 * 1000);
+    usleep(1000 * 1000);
   } else if (OB_FAIL(common_rpc_proxy->create_tenant(create_tenant_arg, tenant_id))) {
     LOG_WARN("rpc proxy create tenant failed", K(ret));
   } else if (!create_tenant_arg.if_not_exist_ && OB_INVALID_ID == tenant_id) {
