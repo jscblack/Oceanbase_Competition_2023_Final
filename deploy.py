@@ -187,7 +187,6 @@ if __name__ == "__main__":
                         "enable_tcp_keepalive=False,"
                         "enable_perf_event=False,"
                         "enable_sql_operator_dump=False,"
-                        "enable_major_freeze=False,"
                         "rootservice_ready_check_interval=100000us,"
                         "lease_time=1s,"
                         "server_check_interval=30s,"
