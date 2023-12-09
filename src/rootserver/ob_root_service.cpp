@@ -9194,6 +9194,10 @@ int ObRootService::ObCreateTenantTask::process()
     }
   } else {}
   LOG_INFO("finish create tenant", KR(ret), K(tenant_id_), K(arg_), "timeout_ts", THIS_WORKER.get_timeout_ts());
+  usleep(500 * 1000); // wait tenant and refresh
+  GCTX.status_ = observer::SS_SERVING;
+  setenv("SINGLE_BOOTSTRAP", "false", 1/*replace*/); // pull this env to here, since when python finish, the tenant processing is still on
+  LOG_INFO("finish create tenant, after wait", KR(ret), K(tenant_id_));
   return ret;
 }
 

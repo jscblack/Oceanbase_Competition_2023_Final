@@ -322,7 +322,11 @@ int ObMPConnect::process()
       // accept system tenant for bootstrap, do not let other users login before observer start service
       ret = OB_SERVER_IS_INIT;
       LOG_WARN("server is initializing", K(ret));
-    } else if (SS_STOPPING == GCTX.status_) {
+      // UPDATE: when access to user tenant, just a little bit wait and will have tenant ready, since tenant is createing background
+      ret = OB_SUCCESS;
+      usleep(1000 * 1000);
+      LOG_WARN("server was initializing, but up now", K(ret));
+    } if (SS_STOPPING == GCTX.status_) {
       ret = OB_SERVER_IS_STOPPING;
       LOG_WARN("server is stopping", K(ret));
     } else if (OB_FAIL(check_update_tenant_id(*conn, tenant_id))) {

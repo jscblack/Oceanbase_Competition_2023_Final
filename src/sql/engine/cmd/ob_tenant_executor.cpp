@@ -97,7 +97,7 @@ int ObCreateTenantExecutor::execute(ObExecContext &ctx, ObCreateTenantStmt &stmt
     if (OB_FAIL(common_rpc_proxy->create_tenant(*create_tenant_arg_ptr, *tenant_id_ptr))) {
       LOG_WARN("rpc proxy create tenant failed", K(ret));
     }
-    usleep(1000*1000);
+    usleep(1000 * 1000);
   } else if (OB_FAIL(common_rpc_proxy->create_tenant(create_tenant_arg, tenant_id))) {
     LOG_WARN("rpc proxy create tenant failed", K(ret));
   } else if (!create_tenant_arg.if_not_exist_ && OB_INVALID_ID == tenant_id) {
@@ -113,7 +113,6 @@ int ObCreateTenantExecutor::execute(ObExecContext &ctx, ObCreateTenantStmt &stmt
   }
   LOG_INFO("[CREATE TENANT] create tenant", KR(ret), K(create_tenant_arg),
            "cost", ObTimeUtility::current_time() - start_ts);
-  GCTX.status_ = observer::SS_SERVING;
   return ret;
 }
 

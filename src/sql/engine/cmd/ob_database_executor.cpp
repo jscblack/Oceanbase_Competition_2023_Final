@@ -41,7 +41,7 @@ int ObCreateDatabaseExecutor::execute(ObExecContext &ctx, ObCreateDatabaseStmt &
 {
   int ret = OB_SUCCESS;
   if(!common::is_bootstrap_in_single_mode()){
-    ::usleep(2000 * 1000); // help pass test
+    ::usleep(1000 * 1000); // help pass test
   }
   ObTaskExecutorCtx *task_exec_ctx = NULL;
   obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
