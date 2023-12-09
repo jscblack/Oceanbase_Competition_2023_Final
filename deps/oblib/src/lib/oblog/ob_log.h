@@ -958,7 +958,7 @@ void ObLogger::log_it(const char *mod_name,
             Function &&log_data_func)
 {
     int ret = OB_SUCCESS;
-    return; // bypass all log
+    // return; // bypass all log
     if (OB_LIKELY(level <= OB_LOG_LEVEL_DEBUG)
         && OB_LIKELY(level >= OB_LOG_LEVEL_DBA_ERROR)
         && OB_LIKELY(is_enable_logging())

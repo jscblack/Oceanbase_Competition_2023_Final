@@ -5388,6 +5388,31 @@ int ObServerSchemaService::refresh_full_schema(
           }
         }
 
+        struct get_all_tables_args{
+          ObSchemaService *&schema_service_;
+          ObISQLClient &sql_client_;
+          ObArenaAllocator &allocator_;
+          const ObRefreshSchemaStatus &schema_status_;
+          uint64_t tenant_id_;
+          const int64_t schema_version_;
+          ObArray<ObSimpleTableSchemaV2*> &simple_tables_;
+          get_all_tables_args(ObSchemaService *&schema_service, ObISQLClient &sql_client, ObArenaAllocator &allocator, const ObRefreshSchemaStatus &schema_status, uint64_t tenant_id,
+                              const int64_t schema_version, ObArray<ObSimpleTableSchemaV2*> &simple_tables):
+                              schema_service_(schema_service), sql_client_(sql_client), allocator_(allocator), schema_status_(schema_status), tenant_id_(tenant_id),
+                              schema_version_(schema_version), simple_tables_(simple_tables) {};
+        };
+        class : public ObSimpleThreadPool {
+          void handle(void *task) {
+            int ret = OB_SUCCESS;
+            get_all_tables_args *task_args = reinterpret_cast<get_all_tables_args*>(task);
+            if (OB_FAIL(task_args->schema_service_->get_all_tables(
+                task_args->sql_client_, task_args->allocator_, task_args->schema_status_, task_args->schema_version_, task_args->tenant_id_, task_args->simple_tables_))) {
+              LOG_WARN("get all table schema failed", KR(ret), K(task_args->schema_version_), K(task_args->tenant_id_));
+            }
+          }
+        } tp;
+        int64_t begin_task_time = 0;
+
         // refresh sys table schemas
         if (OB_SUCC(ret) && !core_schema_change && sys_schema_change) {
           if (OB_FAIL(get_schema_version_in_inner_table(sql_client, schema_status, schema_version))) {
@@ -5414,6 +5439,21 @@ int ObServerSchemaService::refresh_full_schema(
             // for sys table schema, we publish as sys_temp_version
             const int64_t sys_formal_version = std::max(core_schema_version, schema_version);
             int64_t publish_version = 0;
+
+            // TODO: 在这里起一个异步任务get_all_tables
+            tp.init(1, 128, "GET_ALL_TABLES", tenant_id);
+            begin_task_time = ObTimeUtility::current_time();
+            
+            const int64_t fetch_version_tmp = std::max(core_schema_version, schema_version);
+            auto attr = SET_USE_500("GetAllTables", ObCtxIds::SCHEMA_SERVICE);
+            ObArenaAllocator allocator(attr);
+            ObArray<ObSimpleTableSchemaV2*> simple_tables(common::OB_MALLOC_NORMAL_BLOCK_SIZE, common::ModulePageAllocator(allocator));
+            simple_tables_ = &simple_tables;
+
+            get_all_tables_args *task_args = new get_all_tables_args(schema_service_, sql_client, allocator, schema_status, tenant_id, fetch_version_tmp, simple_tables);
+            tp.push((void*)(task_args));
+            LOG_INFO("submit get all tables task","time_used",ObTimeUtility::current_time() - begin_task_time);
+
             if (OB_FAIL(ObSchemaService::gen_sys_temp_version(sys_formal_version, publish_version))) {
               LOG_WARN("gen_sys_temp_version failed", KR(ret), K(schema_status), K(sys_formal_version));
             } else if (OB_FAIL(try_fetch_publish_sys_schemas(schema_status,
@@ -5439,6 +5479,11 @@ int ObServerSchemaService::refresh_full_schema(
               ret = OB_SUCCESS;
             }
           }
+        }
+
+        tp.destroy();
+        if (begin_task_time != 0) {
+          LOG_INFO("finish get all tables task","time_used",ObTimeUtility::current_time() - begin_task_time);
         }
 
         // refresh full normal schema by schema_version
@@ -6108,29 +6153,34 @@ int ObServerSchemaService::refresh_tenant_full_normal_schema(
       INIT_ARRAY(ObSimpleUserSchema, simple_users);
       INIT_ARRAY(ObSimpleDatabaseSchema, simple_databases);
       INIT_ARRAY(ObSimpleTablegroupSchema, simple_tablegroups);
-      INIT_ARRAY(ObSimpleTableSchemaV2*, simple_tables);
+      // INIT_ARRAY(ObSimpleTableSchemaV2*, simple_tables);
       INIT_ARRAY(ObSimpleOutlineSchema, simple_outlines);
       INIT_ARRAY(ObSimpleRoutineSchema, simple_routines);
+
       INIT_ARRAY(ObSimpleSynonymSchema, simple_synonyms);
       INIT_ARRAY(ObSimplePackageSchema, simple_packages);
       INIT_ARRAY(ObSimpleTriggerSchema, simple_triggers);
       INIT_ARRAY(ObDBPriv, db_privs);
       INIT_ARRAY(ObSysPriv, sys_privs);
+
       INIT_ARRAY(ObTablePriv, table_privs);
       INIT_ARRAY(ObObjPriv, obj_privs);
       INIT_ARRAY(ObSimpleUDFSchema, simple_udfs);
       INIT_ARRAY(ObSimpleUDTSchema, simple_udts);
       INIT_ARRAY(ObSequenceSchema, simple_sequences);
+
       INIT_ARRAY(ObKeystoreSchema, simple_keystores);
       INIT_ARRAY(ObProfileSchema, simple_profiles);
       INIT_ARRAY(ObSAuditSchema, simple_audits);
       INIT_ARRAY(ObLabelSePolicySchema, simple_label_se_policys);
       INIT_ARRAY(ObLabelSeComponentSchema, simple_label_se_components);
+
       INIT_ARRAY(ObLabelSeLabelSchema, simple_label_se_labels);
       INIT_ARRAY(ObLabelSeUserLevelSchema, simple_label_se_user_levels);
       INIT_ARRAY(ObTablespaceSchema, simple_tablespaces);
       INIT_ARRAY(ObDbLinkSchema, simple_dblinks);
       INIT_ARRAY(ObDirectorySchema, simple_directories);
+
       INIT_ARRAY(ObContextSchema, simple_contexts);
       INIT_ARRAY(ObSimpleMockFKParentTableSchema, simple_mock_fk_parent_tables);
       INIT_ARRAY(ObRlsPolicySchema, simple_rls_policys);
@@ -6139,6 +6189,295 @@ int ObServerSchemaService::refresh_tenant_full_normal_schema(
       #undef INIT_ARRAY
       ObSimpleSysVariableSchema simple_sys_variable;
 
+      // TODO: 
+      // 1. 在这里并行拿表 一共31次get，启动6个线程，6 5 5 5 5 5
+      // 2. get_all_tables和前面的过程overlap
+
+      #define INIT_ARRAY_REF(TYPE, name) \
+        ObArray<TYPE>& name
+      struct get_all_args_0 {
+        char type_ = '0';
+        ObSchemaService *&schema_service_;
+        ObISQLClient &sql_client_;
+        const ObRefreshSchemaStatus &schema_status_;
+        uint64_t tenant_id_;
+        const int64_t schema_version_;
+        ObSimpleSysVariableSchema& simple_sys_variable_;
+        INIT_ARRAY_REF(ObSimpleUserSchema, simple_users_);
+        INIT_ARRAY_REF(ObSimpleDatabaseSchema, simple_databases_);
+        INIT_ARRAY_REF(ObSimpleTablegroupSchema, simple_tablegroups_);
+        INIT_ARRAY_REF(ObSimpleOutlineSchema, simple_outlines_);
+        INIT_ARRAY_REF(ObSimpleRoutineSchema, simple_routines_);
+        get_all_args_0(ObSchemaService *&schema_service, ObISQLClient &sql_client, const ObRefreshSchemaStatus &schema_status, uint64_t tenant_id, const int64_t schema_version, ObSimpleSysVariableSchema& simple_sys_variable,
+                      INIT_ARRAY_REF(ObSimpleUserSchema, simple_users), INIT_ARRAY_REF(ObSimpleDatabaseSchema, simple_databases), INIT_ARRAY_REF(ObSimpleTablegroupSchema, simple_tablegroups),
+                      INIT_ARRAY_REF(ObSimpleOutlineSchema, simple_outlines), INIT_ARRAY_REF(ObSimpleRoutineSchema, simple_routines)) : 
+                      schema_service_(schema_service), sql_client_(sql_client), schema_status_(schema_status), tenant_id_(tenant_id), schema_version_(schema_version), 
+                      simple_sys_variable_(simple_sys_variable), simple_users_(simple_users), simple_databases_(simple_databases), simple_tablegroups_(simple_tablegroups), 
+                      simple_outlines_(simple_outlines), simple_routines_(simple_routines) {};
+      };
+      struct get_all_args_1 {
+        char type_ = '1';
+        ObSchemaService *&schema_service_;
+        ObISQLClient &sql_client_;
+        const ObRefreshSchemaStatus &schema_status_;
+        uint64_t tenant_id_;
+        const int64_t schema_version_;
+        INIT_ARRAY_REF(ObSimpleSynonymSchema, simple_synonyms_);
+        INIT_ARRAY_REF(ObSimplePackageSchema, simple_packages_);
+        INIT_ARRAY_REF(ObSimpleTriggerSchema, simple_triggers_);
+        INIT_ARRAY_REF(ObDBPriv, db_privs_);
+        INIT_ARRAY_REF(ObSysPriv, sys_privs_);
+        get_all_args_1(ObSchemaService *&schema_service, ObISQLClient &sql_client, const ObRefreshSchemaStatus &schema_status, uint64_t tenant_id, const int64_t schema_version,
+                      INIT_ARRAY_REF(ObSimpleSynonymSchema, simple_synonyms), INIT_ARRAY_REF(ObSimplePackageSchema, simple_packages), INIT_ARRAY_REF(ObSimpleTriggerSchema, simple_triggers),
+                      INIT_ARRAY_REF(ObDBPriv, db_privs), INIT_ARRAY_REF(ObSysPriv, sys_privs)) : 
+                      schema_service_(schema_service), sql_client_(sql_client), schema_status_(schema_status), tenant_id_(tenant_id), schema_version_(schema_version), 
+                      simple_synonyms_(simple_synonyms), simple_packages_(simple_packages), simple_triggers_(simple_triggers), 
+                      db_privs_(db_privs), sys_privs_(sys_privs) {};
+      };
+      struct get_all_args_2 {
+        char type_ = '2';
+        ObSchemaService *&schema_service_;
+        ObISQLClient &sql_client_;
+        const ObRefreshSchemaStatus &schema_status_;
+        uint64_t tenant_id_;
+        const int64_t schema_version_;
+        INIT_ARRAY_REF(ObTablePriv, table_privs_);
+        INIT_ARRAY_REF(ObObjPriv, obj_privs_);
+        INIT_ARRAY_REF(ObSimpleUDFSchema, simple_udfs_);
+        INIT_ARRAY_REF(ObSimpleUDTSchema, simple_udts_);
+        INIT_ARRAY_REF(ObSequenceSchema, simple_sequences_);
+        get_all_args_2(ObSchemaService *&schema_service, ObISQLClient &sql_client, const ObRefreshSchemaStatus &schema_status, uint64_t tenant_id, const int64_t schema_version,
+                      INIT_ARRAY_REF(ObTablePriv, table_privs), INIT_ARRAY_REF(ObObjPriv, obj_privs), INIT_ARRAY_REF(ObSimpleUDFSchema, simple_udfs),
+                      INIT_ARRAY_REF(ObSimpleUDTSchema, simple_udts), INIT_ARRAY_REF(ObSequenceSchema, simple_sequences)) : 
+                      schema_service_(schema_service), sql_client_(sql_client), schema_status_(schema_status), tenant_id_(tenant_id), schema_version_(schema_version), 
+                      table_privs_(table_privs), obj_privs_(obj_privs), simple_udfs_(simple_udfs), 
+                      simple_udts_(simple_udts), simple_sequences_(simple_sequences) {};
+      };
+      struct get_all_args_3 {
+        char type_ = '3';
+        ObSchemaService *&schema_service_;
+        ObISQLClient &sql_client_;
+        const ObRefreshSchemaStatus &schema_status_;
+        uint64_t tenant_id_;
+        const int64_t schema_version_;
+        INIT_ARRAY_REF(ObKeystoreSchema, simple_keystores_);
+        INIT_ARRAY_REF(ObProfileSchema, simple_profiles_);
+        INIT_ARRAY_REF(ObSAuditSchema, simple_audits_);
+        INIT_ARRAY_REF(ObLabelSePolicySchema, simple_label_se_policys_);
+        INIT_ARRAY_REF(ObLabelSeComponentSchema, simple_label_se_components_);
+        get_all_args_3(ObSchemaService *&schema_service, ObISQLClient &sql_client, const ObRefreshSchemaStatus &schema_status, uint64_t tenant_id, const int64_t schema_version,
+                      INIT_ARRAY_REF(ObKeystoreSchema, simple_keystores), INIT_ARRAY_REF(ObProfileSchema, simple_profiles), INIT_ARRAY_REF(ObSAuditSchema, simple_audits),
+                      INIT_ARRAY_REF(ObLabelSePolicySchema, simple_label_se_policys), INIT_ARRAY_REF(ObLabelSeComponentSchema, simple_label_se_components)) : 
+                      schema_service_(schema_service), sql_client_(sql_client), schema_status_(schema_status), tenant_id_(tenant_id), schema_version_(schema_version), 
+                      simple_keystores_(simple_keystores), simple_profiles_(simple_profiles), simple_audits_(simple_audits), 
+                      simple_label_se_policys_(simple_label_se_policys), simple_label_se_components_(simple_label_se_components) {};
+      };
+      struct get_all_args_4 {
+        char type_ = '4';
+        ObSchemaService *&schema_service_;
+        ObISQLClient &sql_client_;
+        const ObRefreshSchemaStatus &schema_status_;
+        uint64_t tenant_id_;
+        const int64_t schema_version_;
+        INIT_ARRAY_REF(ObLabelSeLabelSchema, simple_label_se_labels_);
+        INIT_ARRAY_REF(ObLabelSeUserLevelSchema, simple_label_se_user_levels_);
+        INIT_ARRAY_REF(ObTablespaceSchema, simple_tablespaces_);
+        INIT_ARRAY_REF(ObDbLinkSchema, simple_dblinks_);
+        INIT_ARRAY_REF(ObDirectorySchema, simple_directories_);
+        get_all_args_4(ObSchemaService *&schema_service, ObISQLClient &sql_client, const ObRefreshSchemaStatus &schema_status, uint64_t tenant_id, const int64_t schema_version,
+                      INIT_ARRAY_REF(ObLabelSeLabelSchema, simple_label_se_labels), INIT_ARRAY_REF(ObLabelSeUserLevelSchema, simple_label_se_user_levels), INIT_ARRAY_REF(ObTablespaceSchema, simple_tablespaces),
+                      INIT_ARRAY_REF(ObDbLinkSchema, simple_dblinks), INIT_ARRAY_REF(ObDirectorySchema, simple_directories)) : 
+                      schema_service_(schema_service), sql_client_(sql_client), schema_status_(schema_status), tenant_id_(tenant_id), schema_version_(schema_version), 
+                      simple_label_se_labels_(simple_label_se_labels), simple_label_se_user_levels_(simple_label_se_user_levels), simple_tablespaces_(simple_tablespaces), 
+                      simple_dblinks_(simple_dblinks), simple_directories_(simple_directories) {};
+      };
+      struct get_all_args_5 {
+        char type_ = '5';
+        ObSchemaService *&schema_service_;
+        ObISQLClient &sql_client_;
+        const ObRefreshSchemaStatus &schema_status_;
+        uint64_t tenant_id_;
+        const int64_t schema_version_;
+        INIT_ARRAY_REF(ObContextSchema, simple_contexts_);
+        INIT_ARRAY_REF(ObSimpleMockFKParentTableSchema, simple_mock_fk_parent_tables_);
+        INIT_ARRAY_REF(ObRlsPolicySchema, simple_rls_policys_);
+        INIT_ARRAY_REF(ObRlsGroupSchema, simple_rls_groups_);
+        INIT_ARRAY_REF(ObRlsContextSchema, simple_rls_contexts_);
+        get_all_args_5(ObSchemaService *&schema_service, ObISQLClient &sql_client, const ObRefreshSchemaStatus &schema_status, uint64_t tenant_id, const int64_t schema_version,
+                      INIT_ARRAY_REF(ObContextSchema, simple_contexts), INIT_ARRAY_REF(ObSimpleMockFKParentTableSchema, simple_mock_fk_parent_tables), INIT_ARRAY_REF(ObRlsPolicySchema, simple_rls_policys), 
+                      INIT_ARRAY_REF(ObRlsGroupSchema, simple_rls_groups), INIT_ARRAY_REF(ObRlsContextSchema, simple_rls_contexts)) : 
+                      schema_service_(schema_service), sql_client_(sql_client), schema_status_(schema_status), tenant_id_(tenant_id), schema_version_(schema_version), 
+                      simple_contexts_(simple_contexts), simple_mock_fk_parent_tables_(simple_mock_fk_parent_tables), simple_rls_policys_(simple_rls_policys), 
+                      simple_rls_groups_(simple_rls_groups), simple_rls_contexts_(simple_rls_contexts) {};
+      };
+      #undef INIT_ARRAY_REF
+
+      class : public ObSimpleThreadPool {
+        void handle(void *task) {
+          int ret = OB_SUCCESS;
+          char* type = (char*)(task);
+          switch (*type) {
+            case '0': {
+              get_all_args_0* task_args_0 = reinterpret_cast<get_all_args_0*>(task);
+              if (OB_FAIL(task_args_0->schema_service_->get_sys_variable(task_args_0->sql_client_, task_args_0->schema_status_, task_args_0->tenant_id_,
+                  task_args_0->schema_version_, task_args_0->simple_sys_variable_))) {
+                LOG_WARN("get all sys variables failed", K(ret), K(task_args_0->schema_version_), K(task_args_0->tenant_id_));
+              } else if (OB_FAIL(task_args_0->schema_service_->get_all_users(
+                  task_args_0->sql_client_, task_args_0->schema_status_, task_args_0->schema_version_, task_args_0->tenant_id_, task_args_0->simple_users_))) {
+                LOG_WARN("get all users failed", K(ret), K(task_args_0->schema_version_), K(task_args_0->tenant_id_));
+              } else if (OB_FAIL(task_args_0->schema_service_->get_all_databases(
+                  task_args_0->sql_client_, task_args_0->schema_status_, task_args_0->schema_version_, task_args_0->tenant_id_, task_args_0->simple_databases_))) {
+                LOG_WARN("get all databases failed", K(ret), K(task_args_0->schema_version_), K(task_args_0->tenant_id_));
+              } else if (OB_FAIL(task_args_0->schema_service_->get_all_tablegroups(
+                  task_args_0->sql_client_, task_args_0->schema_status_, task_args_0->schema_version_, task_args_0->tenant_id_, task_args_0->simple_tablegroups_))) {
+                LOG_WARN("get all tablegroups failed", K(ret), K(task_args_0->schema_version_), K(task_args_0->tenant_id_));
+              } else if (OB_FAIL(task_args_0->schema_service_->get_all_outlines(
+                  task_args_0->sql_client_, task_args_0->schema_status_, task_args_0->schema_version_, task_args_0->tenant_id_, task_args_0->simple_outlines_))) {
+                LOG_WARN("get all outline schema failed", K(ret), K(task_args_0->schema_version_), K(task_args_0->tenant_id_));
+              } else if (OB_FAIL(task_args_0->schema_service_->get_all_routines(
+                  task_args_0->sql_client_, task_args_0->schema_status_, task_args_0->schema_version_, task_args_0->tenant_id_, task_args_0->simple_routines_))) {
+                LOG_WARN("get all procedure schema failed", K(ret), K(task_args_0->schema_version_), K(task_args_0->tenant_id_));
+              } 
+              break;
+            }
+            case '1': {
+              get_all_args_1* task_args_1 = reinterpret_cast<get_all_args_1*>(task);
+              if (OB_FAIL(task_args_1->schema_service_->get_all_synonyms(
+                  task_args_1->sql_client_, task_args_1->schema_status_, task_args_1->schema_version_, task_args_1->tenant_id_, task_args_1->simple_synonyms_))) {
+                LOG_WARN("get all synonym schema failed", K(ret), K(task_args_1->schema_version_), K(task_args_1->tenant_id_));
+              } else if (OB_FAIL(task_args_1->schema_service_->get_all_packages(
+                  task_args_1->sql_client_, task_args_1->schema_status_, task_args_1->schema_version_, task_args_1->tenant_id_, task_args_1->simple_packages_))) {
+                LOG_WARN("get all package schema failed", K(ret), K(task_args_1->schema_version_), K(task_args_1->tenant_id_));
+              } else if (OB_FAIL(task_args_1->schema_service_->get_all_triggers(
+                  task_args_1->sql_client_, task_args_1->schema_status_, task_args_1->schema_version_, task_args_1->tenant_id_, task_args_1->simple_triggers_))) {
+                LOG_WARN("get all trigger schema failed", K(ret), K(task_args_1->schema_version_), K(task_args_1->tenant_id_));
+              } else if (OB_FAIL(task_args_1->schema_service_->get_all_db_privs(
+                  task_args_1->sql_client_, task_args_1->schema_status_, task_args_1->schema_version_, task_args_1->tenant_id_, task_args_1->db_privs_))) {
+                LOG_WARN("get all db priv schema failed", K(ret), K(task_args_1->schema_version_), K(task_args_1->tenant_id_));
+              } else if (OB_FAIL(task_args_1->schema_service_->get_all_sys_privs(
+                  task_args_1->sql_client_, task_args_1->schema_status_, task_args_1->schema_version_, task_args_1->tenant_id_, task_args_1->sys_privs_))) {
+                LOG_WARN("get all obj priv failed", K(ret), K(task_args_1->schema_version_), K(task_args_1->tenant_id_));
+              } 
+              break;
+            }
+            case '2': {
+              get_all_args_2* task_args_2 = reinterpret_cast<get_all_args_2*>(task);
+              if (OB_FAIL(task_args_2->schema_service_->get_all_table_privs(
+                  task_args_2->sql_client_, task_args_2->schema_status_, task_args_2->schema_version_, task_args_2->tenant_id_, task_args_2->table_privs_))) {
+                LOG_WARN("get all table priv failed", K(ret), K(task_args_2->schema_version_), K(task_args_2->tenant_id_));
+              } else if (OB_FAIL(task_args_2->schema_service_->get_all_obj_privs(
+                  task_args_2->sql_client_, task_args_2->schema_status_, task_args_2->schema_version_, task_args_2->tenant_id_, task_args_2->obj_privs_))) {
+                LOG_WARN("get all obj priv failed", K(ret), K(task_args_2->schema_version_), K(task_args_2->tenant_id_));
+              } else if (OB_FAIL(task_args_2->schema_service_->get_all_udfs(
+                  task_args_2->sql_client_, task_args_2->schema_status_, task_args_2->schema_version_, task_args_2->tenant_id_, task_args_2->simple_udfs_))) {
+                LOG_WARN("get all udfs schema failed", K(ret), K(task_args_2->schema_version_), K(task_args_2->tenant_id_));
+              } else if (OB_FAIL(task_args_2->schema_service_->get_all_udts(
+                  task_args_2->sql_client_, task_args_2->schema_status_, task_args_2->schema_version_, task_args_2->tenant_id_, task_args_2->simple_udts_))) {
+                LOG_WARN("get all udts schema failed", K(ret), K(task_args_2->schema_version_), K(task_args_2->tenant_id_));
+              } else if (OB_FAIL(task_args_2->schema_service_->get_all_sequences(
+                  task_args_2->sql_client_, task_args_2->schema_status_, task_args_2->schema_version_, task_args_2->tenant_id_, task_args_2->simple_sequences_))) {
+                LOG_WARN("get all sequences schema failed", K(ret), K(task_args_2->schema_version_), K(task_args_2->tenant_id_));
+              } 
+              break;
+            }
+            case '3': {
+              get_all_args_3* task_args_3 = reinterpret_cast<get_all_args_3*>(task);
+              if (OB_FAIL(task_args_3->schema_service_->get_all_keystores(
+                  task_args_3->sql_client_, task_args_3->schema_status_, task_args_3->schema_version_, task_args_3->tenant_id_, task_args_3->simple_keystores_))) {
+                LOG_WARN("get all keystore schema failed", K(ret), K(task_args_3->schema_version_), K(task_args_3->tenant_id_));
+              } else if (OB_FAIL(task_args_3->schema_service_->get_all_profiles(
+                  task_args_3->sql_client_, task_args_3->schema_status_, task_args_3->schema_version_, task_args_3->tenant_id_, task_args_3->simple_profiles_))) {
+                LOG_WARN("get all profile schema failed", K(ret), K(task_args_3->schema_version_), K(task_args_3->tenant_id_));
+              } else if (OB_FAIL(task_args_3->schema_service_->get_all_audits(
+                  task_args_3->sql_client_, task_args_3->schema_status_, task_args_3->schema_version_, task_args_3->tenant_id_, task_args_3->simple_audits_))) {
+                LOG_WARN("get all audit schema failed", K(ret), K(task_args_3->schema_version_), K(task_args_3->tenant_id_));
+              } else if (OB_FAIL(task_args_3->schema_service_->get_all_label_se_policys(
+                  task_args_3->sql_client_, task_args_3->schema_status_, task_args_3->schema_version_, task_args_3->tenant_id_, task_args_3->simple_label_se_policys_))) {
+                LOG_WARN("get all label security schema failed", K(ret), K(task_args_3->schema_version_), K(task_args_3->tenant_id_));
+              } else if (OB_FAIL(task_args_3->schema_service_->get_all_label_se_components(
+                  task_args_3->sql_client_, task_args_3->schema_status_, task_args_3->schema_version_, task_args_3->tenant_id_, task_args_3->simple_label_se_components_))) {
+                LOG_WARN("get all label security schema failed", K(ret), K(task_args_3->schema_version_), K(task_args_3->tenant_id_));
+              } 
+              break;
+            }
+            case '4': {
+              get_all_args_4* task_args_4 = reinterpret_cast<get_all_args_4*>(task);
+              if (OB_FAIL(task_args_4->schema_service_->get_all_label_se_labels(
+                  task_args_4->sql_client_, task_args_4->schema_status_, task_args_4->schema_version_, task_args_4->tenant_id_, task_args_4->simple_label_se_labels_))) {
+                LOG_WARN("get all label security schema failed", K(ret), K(task_args_4->schema_version_), K(task_args_4->tenant_id_));
+              } else if (OB_FAIL(task_args_4->schema_service_->get_all_label_se_user_levels(
+                  task_args_4->sql_client_, task_args_4->schema_status_, task_args_4->schema_version_, task_args_4->tenant_id_, task_args_4->simple_label_se_user_levels_))) {
+                LOG_WARN("get all label security schema failed", K(ret), K(task_args_4->schema_version_), K(task_args_4->tenant_id_));
+              } else if (OB_FAIL(task_args_4->schema_service_->get_all_tablespaces(
+                  task_args_4->sql_client_, task_args_4->schema_status_, task_args_4->schema_version_, task_args_4->tenant_id_, task_args_4->simple_tablespaces_))) {
+                LOG_WARN("get all tablespace schema failed", K(ret), K(task_args_4->schema_version_), K(task_args_4->tenant_id_));
+              } else if (OB_FAIL(task_args_4->schema_service_->get_all_dblinks(
+                  task_args_4->sql_client_, task_args_4->schema_status_, task_args_4->schema_version_, task_args_4->tenant_id_, task_args_4->simple_dblinks_))) {
+                LOG_WARN("get all dblink schema failed", K(ret), K(task_args_4->schema_version_), K(task_args_4->tenant_id_));
+              } else if (OB_FAIL(task_args_4->schema_service_->get_all_directorys(
+                  task_args_4->sql_client_, task_args_4->schema_status_, task_args_4->schema_version_, task_args_4->tenant_id_, task_args_4->simple_directories_))) {
+                LOG_WARN("get all directory schema failed", K(ret), K(task_args_4->schema_version_), K(task_args_4->tenant_id_));
+              } 
+              break;
+            }
+            case '5': {
+              get_all_args_5* task_args_5 = reinterpret_cast<get_all_args_5*>(task);
+              if (OB_FAIL(task_args_5->schema_service_->get_all_contexts(
+                  task_args_5->sql_client_, task_args_5->schema_status_, task_args_5->schema_version_, task_args_5->tenant_id_, task_args_5->simple_contexts_))) {
+                LOG_WARN("get all context schema failed", K(ret), K(task_args_5->schema_version_), K(task_args_5->tenant_id_));
+              } else if (OB_FAIL(task_args_5->schema_service_->get_all_mock_fk_parent_tables(
+                  task_args_5->sql_client_, task_args_5->schema_status_, task_args_5->schema_version_, task_args_5->tenant_id_, task_args_5->simple_mock_fk_parent_tables_))) {
+                LOG_WARN("get all mock fk parent table schema failed", K(ret), K(task_args_5->schema_version_), K(task_args_5->tenant_id_));
+              } else if (OB_FAIL(task_args_5->schema_service_->get_all_rls_policys(
+                  task_args_5->sql_client_, task_args_5->schema_status_, task_args_5->schema_version_, task_args_5->tenant_id_, task_args_5->simple_rls_policys_))) {
+                LOG_WARN("get all rls policy schema failed", K(ret), K(task_args_5->schema_version_), K(task_args_5->tenant_id_));
+              } else if (OB_FAIL(task_args_5->schema_service_->get_all_rls_groups(
+                  task_args_5->sql_client_, task_args_5->schema_status_, task_args_5->schema_version_, task_args_5->tenant_id_, task_args_5->simple_rls_groups_))) {
+                LOG_WARN("get all rls group schema failed", K(ret), K(task_args_5->schema_version_), K(task_args_5->tenant_id_));
+              } else if (OB_FAIL(task_args_5->schema_service_->get_all_rls_contexts(
+                  task_args_5->sql_client_, task_args_5->schema_status_, task_args_5->schema_version_, task_args_5->tenant_id_, task_args_5->simple_rls_contexts_))) {
+                LOG_WARN("get all rls context schema failed", K(ret), K(task_args_5->schema_version_), K(task_args_5->tenant_id_));
+              }
+            }
+            default: {
+              LOG_WARN("unknown type", K(*type));
+            }
+          }
+        }
+      } tp;
+      
+      const int para_batch = 6;
+      const int task_num = 128;
+      tp.init(para_batch, task_num, "GET_ALL", tenant_id);
+      const int64_t begin_task_time = ObTimeUtility::current_time();
+      get_all_args_0 *task_args_0 = new get_all_args_0(schema_service_, sql_client, schema_status, tenant_id, schema_version, simple_sys_variable, simple_users, simple_databases, simple_tablegroups, simple_outlines, simple_routines);
+      get_all_args_1 *task_args_1 = new get_all_args_1(schema_service_, sql_client, schema_status, tenant_id, schema_version, simple_synonyms, simple_packages, simple_triggers, db_privs, sys_privs);
+      get_all_args_2 *task_args_2 = new get_all_args_2(schema_service_, sql_client, schema_status, tenant_id, schema_version, table_privs, obj_privs, simple_udfs, simple_udts, simple_sequences);
+      get_all_args_3 *task_args_3 = new get_all_args_3(schema_service_, sql_client, schema_status, tenant_id, schema_version, simple_keystores, simple_profiles, simple_audits, simple_label_se_policys, simple_label_se_components);
+      get_all_args_4 *task_args_4 = new get_all_args_4(schema_service_, sql_client, schema_status, tenant_id, schema_version, simple_label_se_labels, simple_label_se_user_levels, simple_tablespaces, simple_dblinks, simple_directories);
+      get_all_args_5 *task_args_5 = new get_all_args_5(schema_service_, sql_client, schema_status, tenant_id, schema_version, simple_contexts, simple_mock_fk_parent_tables, simple_rls_policys, simple_rls_groups, simple_rls_contexts);
+      tp.push((void*)(task_args_0));
+      tp.push((void*)(task_args_1));
+      tp.push((void*)(task_args_2));
+      tp.push((void*)(task_args_3));
+      tp.push((void*)(task_args_4));
+      tp.push((void*)(task_args_5));
+      LOG_INFO("submit all get tasks","time_used",ObTimeUtility::current_time() - begin_task_time);
+      tp.destroy();
+
+      LOG_INFO("finish all get tasks","time_used",ObTimeUtility::current_time() - begin_task_time);
+
+      // TODO:临时正确性测试使用
+      // if (OB_FAIL(schema_service_->get_all_tables( // 单独与外层调用的try_fetch_publish_sys_schemas并行
+      //     sql_client, allocator, schema_status, schema_version, tenant_id, simple_tables))) {
+      //   LOG_WARN("get all table schema failed", KR(ret), K(schema_version), K(tenant_id));
+      // }
+
+      // 完整版实现
+      ObArray<ObSimpleTableSchemaV2*> *simple_tables_ptr = simple_tables_;
+
+      /*
+      const int64_t start_time = ObTimeUtility::current_time();
       if (OB_FAIL(schema_service_->get_sys_variable(sql_client, schema_status, tenant_id,
           schema_version, simple_sys_variable))) {
         LOG_WARN("get all sys variables failed", K(ret), K(schema_version), K(tenant_id));
@@ -6151,7 +6490,7 @@ int ObServerSchemaService::refresh_tenant_full_normal_schema(
       } else if (OB_FAIL(schema_service_->get_all_tablegroups(
           sql_client, schema_status, schema_version, tenant_id, simple_tablegroups))) {
         LOG_WARN("get all tablegroups failed", K(ret), K(schema_version), K(tenant_id));
-      } else if (OB_FAIL(schema_service_->get_all_tables(
+      } else if (OB_FAIL(schema_service_->get_all_tables( // 单独与外层调用的try_fetch_publish_sys_schemas并行
           sql_client, allocator, schema_status, schema_version, tenant_id, simple_tables))) {
         LOG_WARN("get all table schema failed", KR(ret), K(schema_version), K(tenant_id));
       } else if (OB_FAIL(schema_service_->get_all_outlines(
@@ -6265,6 +6604,9 @@ int ObServerSchemaService::refresh_tenant_full_normal_schema(
           LOG_WARN("get all rls_context schema failed", K(ret), K(schema_version), K(tenant_id));
         }
       }
+      const int64_t end_time = ObTimeUtility::current_time() - start_time;
+      LOG_INFO("log by tyh end get ", K(end_time));
+      */
 
       const bool refresh_full_schema = true;
       // add simple schema for cache
@@ -6278,7 +6620,7 @@ int ObServerSchemaService::refresh_tenant_full_normal_schema(
         LOG_WARN("add databases failed", K(ret));
       } else if (OB_FAIL(schema_mgr_for_cache->add_tablegroups(simple_tablegroups))) {
         LOG_WARN("add tablegroups failed", K(ret));
-      } else if (OB_FAIL(schema_mgr_for_cache->add_tables(simple_tables, refresh_full_schema))) {
+      } else if (OB_FAIL(schema_mgr_for_cache->add_tables(*simple_tables_ptr, refresh_full_schema))) {
         LOG_WARN("add tables failed", K(ret));
       } else if (OB_FAIL(schema_mgr_for_cache->outline_mgr_.add_outlines(simple_outlines))) {
         LOG_WARN("add outlines failed", K(ret));
@@ -6344,7 +6686,7 @@ int ObServerSchemaService::refresh_tenant_full_normal_schema(
                "users", simple_users.count(),
                "databases", simple_databases.count(),
                "tablegroups", simple_tablegroups.count(),
-               "tables", simple_tables.count(),
+               "tables", simple_tables_ptr->count(),
                "outlines", simple_outlines.count(),
                "synonyms", simple_synonyms.count(),
                "db_privs", db_privs.count(),

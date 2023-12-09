@@ -1225,6 +1225,7 @@ protected:
 private:
   static const int64_t BUCKET_SIZE = 128;
   // schema_version after bootstrap succeed, it's the min schema_version can be fallbacked
+  ObArray<ObSimpleTableSchemaV2*> *simple_tables_ = nullptr;
 
 protected:
   // new schema management by tenant, need protected by lock
