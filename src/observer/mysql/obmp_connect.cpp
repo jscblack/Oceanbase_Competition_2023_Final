@@ -320,17 +320,19 @@ int ObMPConnect::process()
                && !tenant_name_.empty()
                && 0 != tenant_name_.compare(OB_SYS_TENANT_NAME)) {
       // accept system tenant for bootstrap, do not let other users login before observer start service
+      // Update: due to async create, the tenant may be created at any time, so wait a little bit
       ret = OB_SERVER_IS_INIT;
       LOG_WARN("server is initializing", K(ret));
       const int64_t start_time = common::ObTimeUtility::current_time();
       const int64_t interval = 10 * 1000; // 10ms
-      while(common::ObTimeUtility::current_time()-start_time < 200 * 1000){
+      // wait at most 0.15s to ensure performance and experience
+      while(common::ObTimeUtility::current_time()-start_time < 150 * 1000){
         if (SS_SERVING == GCTX.status_){
           ret = OB_SUCCESS;
           LOG_WARN("server was initializing, but serving now", K(ret));
           break;
         }
-        usleep(interval); // wait at most 200ms to ensure performance and experience
+        usleep(interval);
       }
     } if(OB_FAIL(ret)){
       // refuse to connect

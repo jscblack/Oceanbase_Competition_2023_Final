@@ -96,7 +96,7 @@ int ObCreateTenantExecutor::execute(ObExecContext &ctx, ObCreateTenantStmt &stmt
     if (OB_FAIL(common_rpc_proxy->create_tenant_async(create_tenant_arg, tenant_id))) {
       LOG_WARN("rpc proxy create tenant failed", K(ret));
     }
-    usleep(300 * 1000);
+    usleep(200 * 1000);
   } else if (OB_FAIL(common_rpc_proxy->create_tenant(create_tenant_arg, tenant_id))) {
     LOG_WARN("rpc proxy create tenant failed", K(ret));
   } else if (!create_tenant_arg.if_not_exist_ && OB_INVALID_ID == tenant_id) {
