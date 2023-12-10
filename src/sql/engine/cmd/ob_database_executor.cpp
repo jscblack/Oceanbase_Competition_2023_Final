@@ -40,10 +40,6 @@ ObCreateDatabaseExecutor::~ObCreateDatabaseExecutor()
 int ObCreateDatabaseExecutor::execute(ObExecContext &ctx, ObCreateDatabaseStmt &stmt)
 {
   int ret = OB_SUCCESS;
-  if(common::is_single_delay_conn()){
-    ::usleep(1000 * 1000);
-    setenv("SINGLE_DELAY_CONN", "false", 1/*replace*/);
-  }
   ObTaskExecutorCtx *task_exec_ctx = NULL;
   obrpc::ObCommonRpcProxy *common_rpc_proxy = NULL;
   const obrpc::ObCreateDatabaseArg &create_database_arg = stmt.get_create_database_arg();
