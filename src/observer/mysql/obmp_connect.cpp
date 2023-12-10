@@ -325,8 +325,9 @@ int ObMPConnect::process()
       LOG_WARN("server is initializing", K(ret));
       const int64_t start_time = common::ObTimeUtility::current_time();
       const int64_t interval = 10 * 1000; // 10ms
-      // wait at most 0.15s to ensure performance and experience
-      while(common::ObTimeUtility::current_time()-start_time < 150 * 1000){
+      // wait at most 0.2s to ensure performance and experience
+      // 考虑0.2秒的overlap，不会对可用性产生任何影响
+      while(common::ObTimeUtility::current_time()-start_time < 200 * 1000){
         if (SS_SERVING == GCTX.status_){
           ret = OB_SUCCESS;
           LOG_WARN("server was initializing, but serving now", K(ret));
