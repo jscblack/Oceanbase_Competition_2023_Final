@@ -975,10 +975,16 @@ private:
 
   int refresh_increment_schema(const ObRefreshSchemaStatus &schema_status);
   int refresh_full_schema(const ObRefreshSchemaStatus &schema_status);
+  int refresh_full_schema(const ObRefreshSchemaStatus &schema_status, const bool single_bootstrap);
   int refresh_tenant_full_normal_schema(
       common::ObISQLClient &sql_client,
       const ObRefreshSchemaStatus &schema_status,
       const int64_t schema_version);
+  int refresh_tenant_full_normal_schema(
+      common::ObISQLClient &sql_client,
+      const ObRefreshSchemaStatus &schema_status,
+      const int64_t schema_version,
+      const bool single_bootstrap);
 
 #define GET_INCREMENT_SCHEMA_KEY_FUNC_DECLARE(SCHEMA)               \
   int get_increment_##SCHEMA##_keys(const ObSchemaMgr &schema_guard,  \
