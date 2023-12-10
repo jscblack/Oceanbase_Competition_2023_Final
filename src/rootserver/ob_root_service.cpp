@@ -2732,30 +2732,33 @@ int ObRootService::check_tenant_in_alter_locality(
 
 int ObRootService::create_tenant(const ObCreateTenantArg &arg, UInt64 &tenant_id)
 {
+  LOG_INFO("receive create tenant arg", K(arg), "timeout_ts", THIS_WORKER.get_timeout_ts());
+  int ret = OB_SUCCESS;
+  int tmp_ret = OB_SUCCESS;
+  const ObString &tenant_name = arg.tenant_schema_.get_tenant_name_str();
+  // when recovering table, it needs to create tmp tenant
+  const bool tmp_tenant = arg.is_tmp_tenant_for_recover_;
+  if (!inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", KR(ret));
+  } else if (!tmp_tenant && OB_FAIL(ObResolverUtils::check_not_supported_tenant_name(tenant_name))) {
+    LOG_WARN("unsupported tenant name", KR(ret), K(tenant_name));
+  } else if (OB_FAIL(ddl_service_.create_tenant(arg, tenant_id))) {
+    LOG_WARN("fail to create tenant", KR(ret), K(arg));
+    if (OB_TMP_FAIL(submit_reload_unit_manager_task())) {
+      if (OB_CANCELED != tmp_ret) {
+        LOG_ERROR("fail to reload unit_mgr, please try 'alter system reload unit'", KR(ret), KR(tmp_ret));
+      }
+    }
+  } else {}
+  LOG_INFO("finish create tenant", KR(ret), K(tenant_id), K(arg), "timeout_ts", THIS_WORKER.get_timeout_ts());
+  return ret;
+}
+
+int ObRootService::create_tenant_async(const ObCreateTenantArg &arg, UInt64 &tenant_id)
+{
   // create async task here
-  return submit_create_tenant_task(const_cast<obrpc::ObCreateTenantArg&>(arg), tenant_id);
-  
-  // LOG_INFO("receive create tenant arg", K(arg), "timeout_ts", THIS_WORKER.get_timeout_ts());
-  // int ret = OB_SUCCESS;
-  // int tmp_ret = OB_SUCCESS;
-  // const ObString &tenant_name = arg.tenant_schema_.get_tenant_name_str();
-  // // when recovering table, it needs to create tmp tenant
-  // const bool tmp_tenant = arg.is_tmp_tenant_for_recover_;
-  // if (!inited_) {
-  //   ret = OB_NOT_INIT;
-  //   LOG_WARN("not init", KR(ret));
-  // } else if (!tmp_tenant && OB_FAIL(ObResolverUtils::check_not_supported_tenant_name(tenant_name))) {
-  //   LOG_WARN("unsupported tenant name", KR(ret), K(tenant_name));
-  // } else if (OB_FAIL(ddl_service_.create_tenant(arg, tenant_id))) {
-  //   LOG_WARN("fail to create tenant", KR(ret), K(arg));
-  //   if (OB_TMP_FAIL(submit_reload_unit_manager_task())) {
-  //     if (OB_CANCELED != tmp_ret) {
-  //       LOG_ERROR("fail to reload unit_mgr, please try 'alter system reload unit'", KR(ret), KR(tmp_ret));
-  //     }
-  //   }
-  // } else {}
-  // LOG_INFO("finish create tenant", KR(ret), K(tenant_id), K(arg), "timeout_ts", THIS_WORKER.get_timeout_ts());
-  // return ret;
+  return submit_create_tenant_task(arg, tenant_id);
 }
 
 int ObRootService::create_tenant_end(const ObCreateTenantEndArg &arg)
@@ -9163,7 +9166,7 @@ ObRootService::ObCreateTenantTask::ObCreateTenantTask(ObRootService &root_servic
   LOG_INFO("init ObCreateTenantTask", K(arg_));
 }
 
-int ObRootService::ObCreateTenantTask::wait_schema_refreshed_(const uint64_t tenant_id)
+int ObRootService::ObCreateTenantTask::wait_schema_refreshed_inner_(const uint64_t tenant_id)
 {
   int ret = OB_SUCCESS;
   int64_t start_ts = ObTimeUtility::current_time();
@@ -9217,7 +9220,7 @@ int ObRootService::ObCreateTenantTask::wait_schema_refreshed_(const uint64_t ten
   return ret;
 }
 
-int ObRootService::ObCreateTenantTask::wait_user_ls_valid_(const uint64_t tenant_id)
+int ObRootService::ObCreateTenantTask::wait_user_ls_valid_inner_(const uint64_t tenant_id)
 {
   int ret = OB_SUCCESS;
   int64_t start_ts = ObTimeUtility::current_time();
@@ -9304,12 +9307,12 @@ int ObRootService::ObCreateTenantTask::process()
       }
     }
   } else {}
-  LOG_INFO("finish create tenant", KR(ret), K(tenant_id_), K(arg_), "timeout_ts", THIS_WORKER.get_timeout_ts());
+  LOG_INFO("finish create tenant, rpc part", KR(ret), K(tenant_id_), K(arg_), "timeout_ts", THIS_WORKER.get_timeout_ts());
   if (OB_INVALID_ID != tenant_id_) {
     int tmp_ret = OB_SUCCESS; // try refresh schema and wait ls valid
-    if (OB_TMP_FAIL(wait_schema_refreshed_(tenant_id_))) {
+    if (OB_TMP_FAIL(wait_schema_refreshed_inner_(tenant_id_))) {
       LOG_WARN("fail to wait schema refreshed", KR(tmp_ret), K(tenant_id_));
-    } else if (OB_TMP_FAIL(wait_user_ls_valid_(tenant_id_))) {
+    } else if (OB_TMP_FAIL(wait_schema_refreshed_inner_(tenant_id_))) {
       LOG_WARN("failed to wait user ls valid, but ignore", KR(tmp_ret), K(tenant_id_));
     }
     GCTX.status_ = observer::SS_SERVING;

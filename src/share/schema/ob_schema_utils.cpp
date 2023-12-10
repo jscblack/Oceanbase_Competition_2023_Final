@@ -465,6 +465,8 @@ int ObSchemaUtils::construct_inner_table_schemas(
           bool exist = false;
           if (OB_FAIL((*creator_ptr)(table_schema))) {
             LOG_WARN("fail to gen sys table schema", KR(ret));
+          } else if(filter_schema(table_schema)){
+            continue;
           } else if (OB_FAIL(ObSchemaUtils::construct_tenant_space_full_table(
                      tenant_id, table_schema))) {
             LOG_WARN("fail to construct tenant space table", KR(ret), K(tenant_id));
@@ -492,6 +494,17 @@ int ObSchemaUtils::construct_inner_table_schemas(
     }
   }
   return ret;
+}
+
+bool ObSchemaUtils::filter_schema(
+    ObTableSchema &tschema)
+{
+  if(!common::is_single_extrme_perf()){
+    return false;
+  }
+  // filter some schemas
+  // if have _ora_ filter it
+  return tschema.get_database_id() == OB_ORA_SYS_DATABASE_ID;;
 }
 
 int ObSchemaUtils::try_check_parallel_ddl_schema_in_sync(

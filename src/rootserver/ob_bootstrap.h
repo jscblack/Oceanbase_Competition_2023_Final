@@ -163,6 +163,8 @@ private:
   virtual int construct_schema(
       const share::schema_create_func func,
       share::schema::ObTableSchema &tschema);
+  virtual bool filter_schema(
+      ObTableSchema &tschema);
   virtual int broadcast_sys_schema(
       const common::ObSArray<share::schema::ObTableSchema> &table_schemas);
   static int batch_create_schema(

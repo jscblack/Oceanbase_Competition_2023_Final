@@ -55,6 +55,7 @@ public:
   // RPC_S(PR5 fetch_active_server_status, obrpc::OB_FETCH_ACTIVE_SERVER_STATUS, (ObFetchAliveServerArg), ObFetchActiveServerAddrResult);
 
   RPC_S(PRD create_tenant, obrpc::OB_CREATE_TENANT, (ObCreateTenantArg), UInt64);
+  RPC_S(PRD create_tenant_async, obrpc::OB_CREATE_TENANT_ASYNC, (ObCreateTenantArg), UInt64);
   RPC_S(PRD create_tenant_end, obrpc::OB_CREATE_TENANT_END, (ObCreateTenantEndArg));
   RPC_S(PRD drop_tenant, obrpc::OB_DROP_TENANT, (ObDropTenantArg));
   RPC_S(PRD modify_tenant, obrpc::OB_MODIFY_TENANT, (ObModifyTenantArg));

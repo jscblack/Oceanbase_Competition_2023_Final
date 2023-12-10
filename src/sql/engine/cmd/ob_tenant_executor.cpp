@@ -91,8 +91,9 @@ int ObCreateTenantExecutor::execute(ObExecContext &ctx, ObCreateTenantStmt &stmt
     ret = OB_NOT_INIT;
     LOG_WARN("get common rpc proxy failed");
   } else if(common::is_bootstrap_in_single_mode()){
+    // use async tenant
     LOG_INFO("send rpc proxy create tenant", K(create_tenant_arg));
-    if (OB_FAIL(common_rpc_proxy->create_tenant(create_tenant_arg, tenant_id))) {
+    if (OB_FAIL(common_rpc_proxy->create_tenant_async(create_tenant_arg, tenant_id))) {
       LOG_WARN("rpc proxy create tenant failed", K(ret));
     }
     usleep(1000 * 1000);

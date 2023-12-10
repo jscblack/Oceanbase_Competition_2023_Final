@@ -272,8 +272,8 @@ public:
     virtual int64_t get_deep_copy_size() const override { return sizeof(*this); }
     virtual ObAsyncTask *deep_copy(char *buf, const int64_t buf_size) const override;
   private:
-    int wait_schema_refreshed_(const uint64_t tenant_id);
-    int wait_user_ls_valid_(const uint64_t tenant_id);
+    int wait_schema_refreshed_inner_(const uint64_t tenant_id);
+    int wait_user_ls_valid_inner_(const uint64_t tenant_id);
     ObRootService &root_service_;
     obrpc::ObCreateTenantArg arg_;
     obrpc::UInt64 tenant_id_;
@@ -485,6 +485,7 @@ public:
   int merge_resource_pool(const obrpc::ObMergeResourcePoolArg &arg);
   int alter_resource_tenant(const obrpc::ObAlterResourceTenantArg &arg);
   int create_tenant(const obrpc::ObCreateTenantArg &arg, obrpc::UInt64 &tenant_id);
+  int create_tenant_async(const obrpc::ObCreateTenantArg &arg, obrpc::UInt64 &tenant_id);
   int create_tenant_end(const obrpc::ObCreateTenantEndArg &arg);
   int commit_alter_tenant_locality(const rootserver::ObCommitAlterTenantLocalityArg &arg);
   int drop_tenant(const obrpc::ObDropTenantArg &arg);

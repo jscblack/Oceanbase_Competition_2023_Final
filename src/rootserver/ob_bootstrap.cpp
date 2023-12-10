@@ -850,7 +850,6 @@ int ObBootstrap::construct_all_schema(ObIArray<ObTableSchema> &table_schemas)
   } else if (OB_FAIL(table_schemas.reserve(OB_SYS_TABLE_COUNT))) {
     LOG_WARN("reserve failed", "capacity", OB_SYS_TABLE_COUNT, KR(ret));
   } else {
-    table_schemas.reserve(ARRAYSIZEOF(creator_ptr_arrays));
     HEAP_VARS_2((ObTableSchema, table_schema), (ObTableSchema, data_schema)) {
       for (int64_t i = 0; OB_SUCC(ret) && i < ARRAYSIZEOF(creator_ptr_arrays); ++i) {
         for (const schema_create_func *creator_ptr = creator_ptr_arrays[i];
@@ -859,6 +858,8 @@ int ObBootstrap::construct_all_schema(ObIArray<ObTableSchema> &table_schemas)
           bool exist = false;
           if (OB_FAIL(construct_schema(*creator_ptr, table_schema))) {
             LOG_WARN("construct_schema failed", K(table_schema), KR(ret));
+          } else if(filter_schema(table_schema)){
+            continue;
           } else if (OB_FAIL(ObSysTableChecker::is_inner_table_exist(
                      OB_SYS_TENANT_ID, table_schema, exist))) {
             LOG_WARN("fail to check inner table exist",
@@ -1142,6 +1143,17 @@ int ObBootstrap::construct_schema(
     LOG_WARN("failed to create table schema", K(ret));
   } else {} // no more to do
   return ret;
+}
+
+bool ObBootstrap::filter_schema(
+    ObTableSchema &tschema)
+{
+  if(!common::is_single_extrme_perf()){
+    return false;
+  }
+  // filter some schemas
+  // if from ora just filter it
+  return tschema.get_database_id() == OB_ORA_SYS_DATABASE_ID;
 }
 
 int ObBootstrap::add_servers_in_rs_list(rootserver::ObServerZoneOpService &server_zone_op_service) {
