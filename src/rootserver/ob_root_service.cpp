@@ -9308,7 +9308,7 @@ int ObRootService::ObCreateTenantTask::process()
     }
   } else {}
   LOG_INFO("finish create tenant, rpc part", KR(ret), K(tenant_id_), K(arg_), "timeout_ts", THIS_WORKER.get_timeout_ts());
-  if (OB_INVALID_ID != tenant_id_ && !common::is_single_extrme_perf()/*if in extreme perf mode, use natural overlap, instead of wait*/) {
+  if (OB_INVALID_ID != tenant_id_ && !common::is_single_extreme_perf()/*if in extreme perf mode, use natural overlap, instead of wait*/) {
     int tmp_ret = OB_SUCCESS; // try refresh schema and wait ls valid
     if (OB_TMP_FAIL(wait_schema_refreshed_inner_(tenant_id_))) {
       LOG_WARN("fail to wait schema refreshed", KR(tmp_ret), K(tenant_id_));

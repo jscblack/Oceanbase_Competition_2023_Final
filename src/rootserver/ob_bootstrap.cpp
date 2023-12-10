@@ -1148,7 +1148,7 @@ int ObBootstrap::construct_schema(
 bool ObBootstrap::filter_schema(
     ObTableSchema &tschema)
 {
-  if(!common::is_single_extrme_perf()){
+  if(!common::is_single_extreme_perf()){
     return false;
   }
   // filter some schemas
