@@ -95,8 +95,9 @@ int ObCreateTenantExecutor::execute(ObExecContext &ctx, ObCreateTenantStmt &stmt
     LOG_INFO("send rpc proxy create tenant", K(create_tenant_arg));
     if (OB_FAIL(common_rpc_proxy->create_tenant_async(create_tenant_arg, tenant_id))) {
       LOG_WARN("rpc proxy create tenant failed", K(ret));
-    }
-    usleep(50 * 1000); // to ensure the tenant meta is persisted, and can be connected
+    } else if(!common::is_single_extreme_perf()){
+      usleep(500 * 1000); // to ensure the tenant meta is persisted, and can be connected
+    } // but in extreme perf mode, we can overlap this proc to the final
   } else if (OB_FAIL(common_rpc_proxy->create_tenant(create_tenant_arg, tenant_id))) {
     LOG_WARN("rpc proxy create tenant failed", K(ret));
   } else if (!create_tenant_arg.if_not_exist_ && OB_INVALID_ID == tenant_id) {
