@@ -11,6 +11,7 @@ import traceback
 
 _logger = logging.getLogger("DeployDemo")
 
+
 def param_check(args):
     # TODO
     return True
@@ -54,12 +55,13 @@ def __clear_env(cluster_home_path: str) -> None:
 
 def __try_to_connect(host, mysql_port: int, *, timeout_seconds=60):
     error_return = None
+    time.sleep(0.4) # the first 400 ms definitively not ready, just wait in order to make sure no disturb
     for _ in range(0, timeout_seconds):
         try:
             return mysql.connect(host=host, user="root", port=mysql_port, passwd="")
         except mysql.err.Error as error:
             error_return = error
-            time.sleep(0.25)
+            time.sleep(0.01) # try connect every 10 ms
 
     _logger.info("failed to connect to observer fater %f seconds",
                  timeout_seconds)
@@ -82,23 +84,20 @@ def __create_tenant(
 
     create_unit_begin = datetime.datetime.now()
     cursor.execute(create_unit_sql)
-    create_unit_end = datetime.datetime.now()
     _logger.info(
-        f"unit create done: {create_unit_sql}, cost: {(create_unit_end - create_unit_begin).total_seconds() * 1000} ms"
+        f"unit create done: {create_unit_sql}, cost: {(datetime.datetime.now() - create_unit_begin).total_seconds() * 1000} ms"
     )
 
     create_resource_pool_begin = datetime.datetime.now()
     cursor.execute(create_resource_pool_sql)
-    create_resource_pool_end = datetime.datetime.now()
     _logger.info(
-        f"resource pool create done: {create_resource_pool_sql}, cost: {(create_resource_pool_end - create_resource_pool_begin).total_seconds() * 1000} ms"
+        f"resource pool create done: {create_resource_pool_sql}, cost: {(datetime.datetime.now() - create_resource_pool_begin).total_seconds() * 1000} ms"
     )
 
     create_tenant_begin = datetime.datetime.now()
     cursor.execute(create_tenant_sql)
-    create_tenant_end = datetime.datetime.now()
     _logger.info(
-        f"tenant create done: {create_tenant_sql}, cost: {(create_tenant_end - create_tenant_begin).total_seconds() * 1000} ms"
+        f"tenant create done: {create_tenant_sql}, cost: {(datetime.datetime.now() - create_tenant_begin).total_seconds() * 1000} ms"
     )
 
 
@@ -195,6 +194,7 @@ if __name__ == "__main__":
                         "virtual_table_location_cache_expire_time=30s,"
                         "location_cache_refresh_min_interval=30s,"
                         "rpc_timeout=2s")
+
     args.opt_str += custom_opt_str
     observer_args = f"-p {args.mysql_port} -P {args.rpc_port} -z {args.zone} -c {args.cluster_id} -d {data_abs_path} -i {args.devname} -r {rootservice} -I {args.ip} -o {args.opt_str}"
 
@@ -207,20 +207,20 @@ if __name__ == "__main__":
         exit(1)
 
     try:
+        connect_begin = datetime.datetime.now()
         db = __try_to_connect(args.ip, int(args.mysql_port))
         cursor = db.cursor(cursor=mysql.cursors.DictCursor)
         _logger.info(
-            f"connect to server success! host={args.ip}, port={args.mysql_port}"
+            f"connect to server success! host={args.ip}, port={args.mysql_port}, cost={((datetime.datetime.now() - connect_begin).total_seconds() * 1000)} ms"
         )
 
         bootstrap_begin = datetime.datetime.now()
         cursor.execute(
             f"ALTER SYSTEM BOOTSTRAP ZONE '{args.zone}' SERVER '{rootservice}'"
         )
-        bootstrap_end = datetime.datetime.now()
         _logger.info(
             "bootstrap success: %s ms"
-            % ((bootstrap_end - bootstrap_begin).total_seconds() * 1000)
+            % ((datetime.datetime.now() - bootstrap_begin).total_seconds() * 1000)
         )
 
         # checkout server status
@@ -241,7 +241,7 @@ if __name__ == "__main__":
             tenant_name=args.tenant_name,
         )
         _logger.info("create tenant done")
-        _logger.info(
+        _logger.error(
             "total time: %s ms !"
             % ((datetime.datetime.now() - start_time).total_seconds() * 1000)
         )
