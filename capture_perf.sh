@@ -109,10 +109,10 @@ if [ "$mode" == "pid" ]; then
     # 根据是否有持续时间来执行perf record
     if [ -n "$duration" ]; then
         echo "Recording performance data for PID $pid for $duration seconds..."
-        perf record -F 99 -p "$pid" -g -- sleep "$duration"
+        perf record -F 200 -p "$pid" -g -- sleep "$duration"
     else
         echo "Recording performance data for PID $pid. Press Ctrl+C to stop recording..."
-        perf record -F 99 -p "$pid" -g &
+        perf record -F 200 -p "$pid" -g &
         PERF_PID=$!
         # 等待perf进程结束
         wait $PERF_PID
@@ -121,13 +121,13 @@ elif [ "$mode" == "exec" ]; then
     echo "Recording performance data for executable at path $exec_file_path..."
     # 在后台执行perf并运行可执行文件
     if [ -n "$duration" ]; then
-        perf record -F 99 -g -- "$exec_file_path" &
+        perf record -F 200 -g -- "$exec_file_path" &
         PERF_PID=$!
         sleep "$duration"
         kill -INT $PERF_PID
         wait $PERF_PID
     else
-        perf record -F 99 -g -- "$exec_file_path"
+        perf record -F 200 -g -- "$exec_file_path"
     fi
 fi
 

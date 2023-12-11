@@ -846,42 +846,85 @@ int ObServer::start()
       FLOG_INFO("success to start net frame");
     }
 
-    if (FAILEDx(multi_tenant_.start())) {
-      LOG_ERROR("fail to start multi tenant", KR(ret));
-    } else {
-      FLOG_INFO("success to start multi tenant");
-    }
+    if(common::is_single_extreme_perf()){
+      // make tenant available ASAP
+      // for overlap with bootstrap
+      if (FAILEDx(multi_tenant_.start())) {
+        LOG_ERROR("fail to start multi tenant", KR(ret));
+      } else {
+        FLOG_INFO("success to start multi tenant");
+      }
 
-    if (FAILEDx(SLOGGERMGR.get_reserved_size(reserved_size))) {
-      LOG_ERROR("fail to get reserved size", KR(ret), K(reserved_size));
-    } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.start(reserved_size))) {
-      LOG_ERROR("start block manager fail", KR(ret));
-    } else {
-      FLOG_INFO("success to start block manager");
-    }
+      if (FAILEDx(SLOGGERMGR.get_reserved_size(reserved_size))) {
+        LOG_ERROR("fail to get reserved size", KR(ret), K(reserved_size));
+      } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.start(reserved_size))) {
+        LOG_ERROR("start block manager fail", KR(ret));
+      } else {
+        FLOG_INFO("success to start block manager");
+      }
 
-    if (FAILEDx(ObIOManager::get_instance().start())) {
-      LOG_ERROR("fail to start io manager", KR(ret));
-    } else {
-      FLOG_INFO("success to start io manager");
-    }
+      if (FAILEDx(ObIOManager::get_instance().start())) {
+        LOG_ERROR("fail to start io manager", KR(ret));
+      } else {
+        FLOG_INFO("success to start io manager");
+      }
+      
+      if (FAILEDx(ObServerCheckpointSlogHandler::get_instance().start())) {
+        LOG_ERROR("fail to start server checkpoint slog handler", KR(ret));
+      } else {
+        FLOG_INFO("success to start server checkpoint slog handler");
+      }
 
-    if (FAILEDx(ObServerCheckpointSlogHandler::get_instance().start())) {
-      LOG_ERROR("fail to start server checkpoint slog handler", KR(ret));
+      if (FAILEDx(try_update_hidden_sys())) {
+        LOG_ERROR("fail to update hidden sys tenant", KR(ret));
+      } else {
+        FLOG_INFO("success to update hidden sys tenant");
+      }
+    
+      if (FAILEDx(log_block_mgr_.start(storage_env_.log_disk_size_))) {
+        LOG_ERROR("fail to start log pool", KR(ret));
+      } else {
+        FLOG_INFO("success to start log pool");
+      }
     } else {
-      FLOG_INFO("success to start server checkpoint slog handler");
-    }
+      // original workflow
+      if (FAILEDx(SLOGGERMGR.get_reserved_size(reserved_size))) {
+        LOG_ERROR("fail to get reserved size", KR(ret), K(reserved_size));
+      } else if (OB_FAIL(OB_SERVER_BLOCK_MGR.start(reserved_size))) {
+        LOG_ERROR("start block manager fail", KR(ret));
+      } else {
+        FLOG_INFO("success to start block manager");
+      }
 
-    if (FAILEDx(try_update_hidden_sys())) {
-      LOG_ERROR("fail to update hidden sys tenant", KR(ret));
-    } else {
-      FLOG_INFO("success to update hidden sys tenant");
-    }
+      if (FAILEDx(ObIOManager::get_instance().start())) {
+        LOG_ERROR("fail to start io manager", KR(ret));
+      } else {
+        FLOG_INFO("success to start io manager");
+      }
 
-    if (FAILEDx(log_block_mgr_.start(storage_env_.log_disk_size_))) {
-      LOG_ERROR("fail to start log pool", KR(ret));
-    } else {
-      FLOG_INFO("success to start log pool");
+      if (FAILEDx(multi_tenant_.start())) {
+        LOG_ERROR("fail to start multi tenant", KR(ret));
+      } else {
+        FLOG_INFO("success to start multi tenant");
+      }
+
+      if (FAILEDx(ObServerCheckpointSlogHandler::get_instance().start())) {
+        LOG_ERROR("fail to start server checkpoint slog handler", KR(ret));
+      } else {
+        FLOG_INFO("success to start server checkpoint slog handler");
+      }
+
+      if (FAILEDx(log_block_mgr_.start(storage_env_.log_disk_size_))) {
+        LOG_ERROR("fail to start log pool", KR(ret));
+      } else {
+        FLOG_INFO("success to start log pool");
+      }
+      
+      if (FAILEDx(try_update_hidden_sys())) {
+        LOG_ERROR("fail to update hidden sys tenant", KR(ret));
+      } else {
+        FLOG_INFO("success to update hidden sys tenant");
+      }
     }
 
     if (FAILEDx(weak_read_service_.start())) {

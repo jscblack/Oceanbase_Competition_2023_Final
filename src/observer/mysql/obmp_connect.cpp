@@ -321,13 +321,14 @@ int ObMPConnect::process()
                && 0 != tenant_name_.compare(OB_SYS_TENANT_NAME)) {
       // accept system tenant for bootstrap, do not let other users login before observer start service
       // Update: due to async create, the tenant may be created at any time, so wait a little bit
+      // Use natural overlap
       ret = OB_SERVER_IS_INIT;
       LOG_WARN("server is initializing", K(ret));
       const int64_t start_time = common::ObTimeUtility::current_time();
       const int64_t interval = 10 * 1000; // 10ms
-      // wait at most 0.5s to ensure performance and experience
-      // 考虑0.5秒的overlap，不会对可用性产生任何影响
-      while(common::ObTimeUtility::current_time()-start_time < 500 * 1000){
+      // wait at most 0.4s to ensure performance and experience
+      // 考虑最多0.4秒的stuck，不会对可用性产生任何影响
+      while(common::ObTimeUtility::current_time()-start_time < 400 * 1000){
         if (SS_SERVING == GCTX.status_){
           ret = OB_SUCCESS;
           LOG_WARN("server was initializing, but serving now", K(ret));
