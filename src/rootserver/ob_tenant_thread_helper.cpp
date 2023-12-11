@@ -171,6 +171,8 @@ int ObTenantThreadHelper::wait_tenant_data_version_ready_(
     const uint64_t tenant_id, const uint64_t &data_version)
 {
   int ret = OB_SUCCESS;
+  const bool single_bootstrap = common::is_bootstrap_in_single_mode();
+  const int64_t start_ts = ObTimeUtility::current_time();
   bool is_ready = false;
   uint64_t tenant_data_version = 0;
   while (!is_ready && !has_set_stop()) {
@@ -187,7 +189,7 @@ int ObTenantThreadHelper::wait_tenant_data_version_ready_(
     }
 
     if (!is_ready) {
-      idle(10 * 1000 * 1000);
+      idle(single_bootstrap?200 * 1000:10 * 1000 *1000);
     }
   }
 
@@ -195,6 +197,9 @@ int ObTenantThreadHelper::wait_tenant_data_version_ready_(
     LOG_WARN("thread has been stopped", K(is_ready), K(tenant_id));
     ret = OB_IN_STOP_STATE;
   }
+  LOG_INFO("wait tenant data version ready", KR(ret), K(tenant_id),
+        K(data_version), K(tenant_data_version),
+        "cost", ObTimeUtility::current_time() - start_ts);
   return ret;
 }
 
@@ -202,10 +207,15 @@ int ObTenantThreadHelper::wait_tenant_schema_and_version_ready_(
     const uint64_t tenant_id, const uint64_t &data_version)
 {
   int ret = OB_SUCCESS;
+  const int64_t start_ts = ObTimeUtility::current_time();
+  const bool single_bootstrap = common::is_bootstrap_in_single_mode();
   if (OB_ISNULL(GCTX.schema_service_)) {
     ret = OB_ERR_UNEXPECTED;
     LOG_WARN("schema ptr is null", KR(ret), KP(GCTX.schema_service_));
-  } else if (OB_FAIL(wait_tenant_data_version_ready_(tenant_id, data_version))) {
+  } /*else if(OB_FAIL(!single_bootstrap||common::GLOBAL_BOOTSTRAP_VAR.is_finish_create_tenant_schema())){
+    ret = OB_NEED_WAIT;
+    LOG_WARN("tenant schema not ready, no do further check", KR(ret), K(tenant_id));
+  }*/ else if (OB_FAIL(wait_tenant_data_version_ready_(tenant_id, data_version))) {
     LOG_WARN("failed to wait tenant data version", KR(ret), K(tenant_id), K(data_version));
   } else {
     bool is_ready = false;
@@ -222,7 +232,7 @@ int ObTenantThreadHelper::wait_tenant_schema_and_version_ready_(
       }
 
       if (!is_ready) {
-        idle(10 * 1000 *1000);
+        idle(single_bootstrap?200 * 1000:10 * 1000 *1000);
       }
     }
 
@@ -231,6 +241,8 @@ int ObTenantThreadHelper::wait_tenant_schema_and_version_ready_(
       ret = OB_IN_STOP_STATE;
     }
   }
+  LOG_INFO("wait tenant schema ready", KR(ret), K(tenant_id),
+        K(data_version), "cost", ObTimeUtility::current_time() - start_ts);
   return ret;
 }
 

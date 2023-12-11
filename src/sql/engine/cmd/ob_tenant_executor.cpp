@@ -90,6 +90,14 @@ int ObCreateTenantExecutor::execute(ObExecContext &ctx, ObCreateTenantStmt &stmt
   } else if (OB_ISNULL(common_rpc_proxy = task_exec_ctx->get_common_rpc())) {
     ret = OB_NOT_INIT;
     LOG_WARN("get common rpc proxy failed");
+  } else if(common::is_bootstrap_in_single_mode()){
+    // use async tenant
+    LOG_INFO("send rpc proxy create tenant", K(create_tenant_arg));
+    if (OB_FAIL(common_rpc_proxy->create_tenant_async(create_tenant_arg, tenant_id))) {
+      LOG_WARN("rpc proxy create tenant failed", K(ret));
+    } else if(!common::is_single_extreme_perf()){
+      usleep(500 * 1000); // to ensure the tenant meta is persisted, and can be connected
+    } // but in extreme perf mode, we can overlap this proc to the final
   } else if (OB_FAIL(common_rpc_proxy->create_tenant(create_tenant_arg, tenant_id))) {
     LOG_WARN("rpc proxy create tenant failed", K(ret));
   } else if (!create_tenant_arg.if_not_exist_ && OB_INVALID_ID == tenant_id) {
@@ -151,8 +159,9 @@ int ObCreateTenantExecutor::wait_schema_refreshed_(const uint64_t tenant_id)
                  && ObSchemaService::is_formal_version(user_schema_version)) {
         break;
       } else {
+        const int64_t INTERVAL = common::is_bootstrap_in_single_mode()?100 * 1000L:500 * 1000L; // 100ms/500ms
         LOG_INFO("wait schema refreshed", K(tenant_id), K(meta_schema_version), K(user_schema_version));
-        ob_usleep(500 * 1000L); // 500ms
+        ob_usleep(INTERVAL);
       }
     }
   }
@@ -196,7 +205,7 @@ int ObCreateTenantExecutor::wait_user_ls_valid_(const uint64_t tenant_id)
       if (OB_FAIL(ret)) {
       } else if (user_ls_valid) {
       } else {
-        const int64_t INTERVAL = 500 * 1000L; // 500ms
+        const int64_t INTERVAL = common::is_bootstrap_in_single_mode()?100 * 1000L:500 * 1000L; // 100ms/500ms
         LOG_INFO("wait user ls valid", KR(ret), K(tenant_id));
         ob_usleep(INTERVAL);
       }

@@ -175,7 +175,8 @@ private:
       const uint64_t tenant_id,
       common::ObArray<SchemaKey> &need_refresh_table_schema_keys,
       common::ObIArray<ObSimpleTableSchemaV2 *> &table_schemas);
-
+  static bool filter_schema(
+      ObTableSchema &tschema);
   // disallow construct
   ObSchemaUtils() {}
   ~ObSchemaUtils() {}

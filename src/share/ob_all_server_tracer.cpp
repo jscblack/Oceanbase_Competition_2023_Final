@@ -598,7 +598,7 @@ int ObServerTraceTask::init(ObServerTraceMap *trace_map, int tg_id)
   } else if (OB_ISNULL(trace_map)) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid argument", K(ret), KP(trace_map));
-  } else if (OB_FAIL(TG_SCHEDULE(tg_id, *this, REFRESH_INTERVAL_US,
+  } else if (OB_FAIL(TG_SCHEDULE(tg_id, *this, common::is_bootstrap_in_single_mode()?REFRESH_INTERVAL_US/10:REFRESH_INTERVAL_US,
                                  true /*repeat schedule*/))) {
     LOG_WARN("fail to schedule timer", K(ret));
   } else {

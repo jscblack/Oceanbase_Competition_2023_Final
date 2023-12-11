@@ -1212,7 +1212,10 @@ void ObBackupTaskScheduler::run2()
     bool reload_flag = false;
     while (!has_set_stop()) {
       bool is_normal = false;
-      if (!is_meta_tenant(tenant_id_)) { // only meta tenant has backup task need to schedule
+      if (common::is_bootstrap_in_single_mode()) { // when bootstrap no need for backup
+        set_idle_time(30*1000*1000); // 30s后再进行 
+        idle();
+      } else if (!is_meta_tenant(tenant_id_)) { // only meta tenant has backup task need to schedule
         set_idle_time(ObBackupBaseService::OB_MAX_IDLE_TIME);
         idle();
       } else if (OB_FAIL(check_tenant_status_normal_(is_normal))) {

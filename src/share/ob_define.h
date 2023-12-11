@@ -475,6 +475,47 @@ inline bool is_query_killed_return(const int ret)
     || OB_DEAD_LOCK == ret;
 }
 
+inline bool is_bootstrap_in_single_mode()
+{
+  //获取环境变量SINGLE_BOOTSTRAP
+  //如果SINGLE_BOOTSTRAP为1，表示单机模式启动
+  const char *env_= getenv("SINGLE_BOOTSTRAP");
+  return (env_ && 0 == strcmp("true", env_));
+}
+
+inline bool is_operate_in_single_mode()
+{
+  const char *env_= getenv("SINGLE_OPERATE");
+  return (env_ && 0 == strcmp("true", env_));
+}
+
+inline bool is_single_extreme_perf()
+{
+  const char *env_= getenv("SINGLE_EXTREME_PERF");
+  return (env_ && 0 == strcmp("true", env_));
+}
+
+struct global_bootstrap_var{
+  // bootstrap
+
+
+  // create tenant
+  bool set_is_create_user_tenant_via_sys(bool new_value){
+    // set env
+    setenv(env_create_user_tenant_via_sys,new_value?"true":"false",1/*replace*/);
+    // is_create_user_tenant_via_sys_ = new_value;
+    return OB_SUCCESS;
+  }
+  bool is_create_user_tenant_via_sys(){
+    const char *env_= getenv(env_create_user_tenant_via_sys);
+    return (env_ && 0 == strcmp("true", env_));
+  }
+private:
+  const char * env_create_user_tenant_via_sys="CREATE_U_T_V_S";
+};
+
+static global_bootstrap_var GLOBAL_BOOTSTRAP_VAR;
+
 //@TODO shanyan.g Temporary settings for elr
 static const bool CAN_ELR = false;
 

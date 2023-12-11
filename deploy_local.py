@@ -10,7 +10,6 @@ import logging
 import traceback
 
 _logger = logging.getLogger("DeployDemo")
-fake_time_mask = 0  # TODO: 用来额外添加延时
 
 
 def param_check(args):
@@ -61,7 +60,7 @@ def __try_to_connect(host, mysql_port: int, *, timeout_seconds=60):
             return mysql.connect(host=host, user="root", port=mysql_port, passwd="")
         except mysql.err.Error as error:
             error_return = error
-            time.sleep(1)
+            time.sleep(0.1)
 
     _logger.info("failed to connect to observer fater %f seconds",
                  timeout_seconds)
@@ -105,7 +104,7 @@ def __create_tenant(
 
 
 if __name__ == "__main__":
-    time.sleep(fake_time_mask)
+    start_time=datetime.datetime.now()
     log_level = logging.INFO
     log_format = (
         "%(asctime)s.%(msecs)03d [%(levelname)-5s] - %(message)s "
@@ -142,7 +141,7 @@ if __name__ == "__main__":
         "-o",
         dest="opt_str",
         type=str,
-        default="__min_full_resource_pool_memory=1073741824,datafile_size=60G,datafile_next=20G,datafile_maxsize=100G,log_disk_size=40G,memory_limit=10G,system_memory=1G,cpu_count=24,cache_wash_threshold=1G,workers_per_cpu_quota=10,schema_history_expire_time=1d,net_thread_count=4,syslog_io_bandwidth_limit=10G",
+        default="__min_full_resource_pool_memory=1073741824,datafile_size=60G,datafile_next=20G,datafile_maxsize=100G,log_disk_size=40G,memory_limit=10G,system_memory=1G,cpu_count=24,cache_wash_threshold=1G,workers_per_cpu_quota=10,schema_history_expire_time=1d,net_thread_count=4,syslog_io_bandwidth_limit=100G",
     )
 
     tenant_group = parser.add_argument_group("tenant", "tenant options")
@@ -186,11 +185,14 @@ if __name__ == "__main__":
                         "enable_rereplication=False,"
                         "enable_rebalance=False,"
                         "enable_tcp_keepalive=False,"
+                        "enable_perf_event=False,"
+                        "enable_sql_operator_dump=False,"
                         "rootservice_ready_check_interval=100000us,"
-                        "lease_time=1s,"
-                        "server_check_interval=1m,"
-                        "plan_cache_evict_interval=1m,"
-                        "virtual_table_location_cache_expire_time=1m,"
+                        "lease_time=10s,"
+                        "server_check_interval=30s,"
+                        "plan_cache_evict_interval=30s,"
+                        "virtual_table_location_cache_expire_time=30s,"
+                        "location_cache_refresh_min_interval=30s,"
                         "rpc_timeout=2s")
 
     args.opt_str += custom_opt_str
@@ -204,7 +206,6 @@ if __name__ == "__main__":
         _logger.info("start observer failed")
         exit(1)
 
-    time.sleep(1)  # 应该是给observer进程启动留的时间
     try:
         db = __try_to_connect(args.ip, int(args.mysql_port))
         cursor = db.cursor(cursor=mysql.cursors.DictCursor)
@@ -240,8 +241,10 @@ if __name__ == "__main__":
             tenant_name=args.tenant_name,
         )
         _logger.info("create tenant done")
-        os.environ["SINGLE_BOOTSTRAP"] = "false"
-
+        _logger.info(
+            "total time: %s ms !"
+            % ((datetime.datetime.now() - start_time).total_seconds() * 1000)
+        )
     except mysql.err.Error as e:
         _logger.info("deploy observer failed. ex=%s", str(e))
         _logger.info(traceback.format_exc())

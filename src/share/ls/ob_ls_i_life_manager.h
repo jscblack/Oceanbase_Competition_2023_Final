@@ -131,7 +131,12 @@ public:
    * */
   static uint64_t get_exec_tenant_id(const uint64_t tenant_id)
   {
-    return get_private_table_exec_tenant_id(tenant_id);
+    // note: user tenent的ls status由sys tenant维护
+    if((common::is_bootstrap_in_single_mode()||common::is_operate_in_single_mode()) && tenant_id==1002){
+      return OB_SYS_TENANT_ID;
+    }else{
+      return get_private_table_exec_tenant_id(tenant_id);
+    }
   }
 
 private:

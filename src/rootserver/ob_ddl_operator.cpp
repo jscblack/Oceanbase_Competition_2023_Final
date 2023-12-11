@@ -5128,8 +5128,8 @@ int ObDDLOperator::init_tenant_env(
     ObMySQLTransaction &trans)
 {
   int ret = OB_SUCCESS;
+  LOG_INFO("init tenant env", K(tenant_schema), K(sys_variable), K(tenant_role), K(recovery_until_scn), K(init_configs));
   const uint64_t tenant_id = tenant_schema.get_tenant_id();
-
   if (OB_UNLIKELY(!recovery_until_scn.is_valid_and_not_min())) {
     ret = OB_INVALID_ARGUMENT;
     LOG_WARN("invalid recovery_until_scn", KR(ret), K(recovery_until_scn));
@@ -5170,16 +5170,39 @@ int ObDDLOperator::init_tenant_env(
   }
 
   if (OB_SUCC(ret) && is_meta_tenant(tenant_id)) {
+    // 不需要meta记录用户租户信息
     const uint64_t user_tenant_id = gen_user_tenant_id(tenant_id);
     ObAllTenantInfo tenant_info;
     if (OB_FAIL(tenant_info.init(user_tenant_id, tenant_role, NORMAL_SWITCHOVER_STATUS, 0,
                 SCN::base_scn(), SCN::base_scn(), SCN::base_scn(), recovery_until_scn))) {
       LOG_WARN("failed to init tenant info", KR(ret), K(tenant_id), K(tenant_role));
-    } else if (OB_FAIL(ObAllTenantInfoProxy::init_tenant_info(tenant_info, &trans))) {
+    } else if (OB_FAIL(ObAllTenantInfoProxy::init_tenant_info(tenant_info, &trans, tenant_id/*1001*/))) {
       LOG_WARN("failed to init tenant info", KR(ret), K(tenant_info));
     }
   }
+  return ret;
+}
 
+int ObDDLOperator::init_user_tenant_env(const uint64_t tenant_id,
+    const share::ObTenantRole &tenant_role,
+    const share::SCN &recovery_until_scn,
+    const common::ObIArray<common::ObConfigPairs> &init_configs,
+    common::ObMySQLTransaction &trans)
+{
+  int ret = OB_SUCCESS;
+  if(OB_SUCC(ret) && common::is_bootstrap_in_single_mode() && is_sys_tenant(tenant_id)){
+    // 由系统代替meta临时创建用户租户
+    const uint64_t user_tenant_id = 1002;
+    ObAllTenantInfo tenant_info;
+    if (OB_FAIL(init_tenant_config(user_tenant_id, init_configs, trans))) {
+      LOG_WARN("insert tenant config failed", KR(ret), K(user_tenant_id));
+    } else if (OB_FAIL(tenant_info.init(user_tenant_id, tenant_role, NORMAL_SWITCHOVER_STATUS, 0,
+                SCN::base_scn(), SCN::base_scn(), SCN::base_scn(), recovery_until_scn))) {
+      LOG_WARN("failed to init tenant info", KR(ret), K(tenant_id), K(tenant_role));
+    } else if (OB_FAIL(ObAllTenantInfoProxy::init_tenant_info(tenant_info, &trans, tenant_id/*1*/))) {
+      LOG_WARN("failed to init tenant info", KR(ret), K(tenant_info));
+    }
+  }
   return ret;
 }
 
@@ -5759,7 +5782,15 @@ int ObDDLOperator::init_tenant_config_(
     } // end foreach
     ObSqlString sql;
     int64_t affected_rows = 0;
-    const uint64_t exec_tenant_id = gen_meta_tenant_id(tenant_id);
+    // const uint64_t exec_tenant_id = gen_meta_tenant_id(tenant_id);
+    uint64_t exec_tenant_id = OB_INVALID_TENANT_ID;
+    LOG_INFO("GLOBAL_BOOTSTRAP_VAR",K(common::GLOBAL_BOOTSTRAP_VAR.is_create_user_tenant_via_sys()));
+    if(common::GLOBAL_BOOTSTRAP_VAR.is_create_user_tenant_via_sys()){
+      // tenant info during bootstrap is stored in sys ls meta
+      exec_tenant_id = OB_SYS_TENANT_ID;
+    } else {
+      exec_tenant_id = gen_meta_tenant_id(tenant_id);
+    }
     if (FAILEDx(dml.splice_batch_insert_sql(OB_TENANT_PARAMETER_TNAME, sql))) {
       LOG_WARN("fail to generate sql", KR(ret), K(tenant_id));
     } else if (OB_FAIL(trans.write(exec_tenant_id, sql.ptr(), affected_rows))) {

@@ -232,7 +232,7 @@ int ObAliveServerRefreshTask::init()
     ret = OB_INIT_TWICE;
     LOG_WARN("init twice", K(ret));
   } else if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::ServerTracerTimer, *this,
-                                 REFRESH_INTERVAL_US))) {
+                                 common::is_bootstrap_in_single_mode()? REFRESH_INTERVAL_US/10 :REFRESH_INTERVAL_US))) {
     if (OB_CANCELED != ret) {
       LOG_ERROR("schedule task failed", K(ret), "task", *this);
     } else {
@@ -256,7 +256,7 @@ void ObAliveServerRefreshTask::runTimerTask()
     }
 
     if (OB_FAIL(TG_SCHEDULE(lib::TGDefIDs::ServerTracerTimer, *this,
-                            REFRESH_INTERVAL_US))) {
+                            common::is_bootstrap_in_single_mode()? REFRESH_INTERVAL_US/10 :REFRESH_INTERVAL_US))) {
       // schedule task fail is fatal ERROR
       if (OB_CANCELED != ret) {
         LOG_ERROR("schedule task failed", K(ret), "task", *this);

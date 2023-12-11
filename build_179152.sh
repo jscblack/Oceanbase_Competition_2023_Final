@@ -12,7 +12,7 @@ KERNEL_RELEASE=`grep -Po 'release [0-9]{1}' /etc/issue 2>/dev/null`
 
 ALL_ARGS=("$@")
 BUILD_ARGS=()
-MAKE_ARGS=(-j 4)
+MAKE_ARGS=(-j 6)
 NEED_MAKE=false
 NEED_INIT=false
 LLD_OPTION=ON

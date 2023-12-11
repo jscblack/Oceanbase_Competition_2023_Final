@@ -163,12 +163,14 @@ private:
   virtual int construct_schema(
       const share::schema_create_func func,
       share::schema::ObTableSchema &tschema);
+  virtual bool filter_schema(
+      ObTableSchema &tschema);
   virtual int broadcast_sys_schema(
       const common::ObSArray<share::schema::ObTableSchema> &table_schemas);
   static int batch_create_schema(
       ObDDLService &ddl_service,
       common::ObIArray<share::schema::ObTableSchema> &table_schemas,
-      const int64_t begin, const int64_t end);
+      int64_t &begin, int64_t &end);
   virtual int check_is_already_bootstrap(bool &is_bootstrap);
   virtual int init_global_stat();
   virtual int init_sequence_id();

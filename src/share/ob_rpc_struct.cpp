@@ -84,6 +84,26 @@ int ObDDLArg::assign(const ObDDLArg &other)
   return ret;
 }
 
+int ObDDLArg::deepcopy_assign(const ObDDLArg &other)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(based_schema_object_infos_.assign(other.based_schema_object_infos_))) {
+    LOG_WARN("fail to assign based_schema_object_infos", KR(ret));
+  } else {
+    // ddl_stmt needs deep copy
+    ObArenaAllocator * allocator = new ObArenaAllocator(ObModIds::OB_POOL);
+    deep_copy_ob_string(*allocator,other.ddl_stmt_str_,ddl_stmt_str_);
+    // ddl_stmt_str_ = other.ddl_stmt_str_;
+    exec_tenant_id_ = other.exec_tenant_id_;
+    ddl_id_str_ = other.ddl_id_str_;
+    sync_from_primary_ = other.sync_from_primary_;
+    parallelism_ = other.parallelism_;
+    task_id_ = other.task_id_;
+    consumer_group_id_ = other.consumer_group_id_;
+  }
+  return ret;
+}
+
 DEF_TO_STRING(ObDDLArg)
 {
   int64_t pos = 0;
@@ -1142,6 +1162,43 @@ int ObCreateTenantArg::assign(const ObCreateTenantArg &other)
   return ret;
 }
 
+int ObCreateTenantArg::deepcopy_assign(const ObCreateTenantArg &other)
+{
+  int ret = OB_SUCCESS;
+  if (OB_FAIL(ObDDLArg::deepcopy_assign(other))) {
+    LOG_WARN("fail to deepcopy_assign ddl arg", KR(ret));
+  } else if (OB_FAIL(tenant_schema_.assign(other.tenant_schema_))) {
+    LOG_WARN("fail to assign tenant schema", K(ret), K(other));
+  } /*else if (OB_FAIL(pool_list_.assign(other.pool_list_))) {
+    LOG_WARN("fail to assign pool list", K(ret), K(other));
+  } else if (OB_FAIL(sys_var_list_.assign(other.sys_var_list_))) {
+    LOG_WARN("fail to assign sys var list", K(ret), K(other));
+  }*/ else {
+    ObArenaAllocator * allocator = new ObArenaAllocator(ObModIds::OB_POOL);
+    common::ObString new_pool_list;
+    deep_copy_ob_string(*allocator,other.pool_list_.at(0),new_pool_list);
+    LOG_INFO("deepcopy_assign new_pool_list",K(other.pool_list_.at(0)),K(new_pool_list));
+    pool_list_.push_back(new_pool_list);
+
+    common::ObString new_sys_var_str;
+    deep_copy_ob_string(*allocator,other.sys_var_list_.at(0).value_,new_sys_var_str);
+    LOG_INFO("deepcopy_assign new_sys_var_str",K(other.sys_var_list_.at(0).value_),K(new_sys_var_str));
+    ObSysVarIdValue new_sys_var(other.sys_var_list_.at(0).sys_id_,new_sys_var_str);
+    sys_var_list_.push_back(new_sys_var);
+
+
+    if_not_exist_ = other.if_not_exist_;
+    name_case_mode_ = other.name_case_mode_;
+    is_restore_ = other.is_restore_;
+    palf_base_info_ = other.palf_base_info_;
+    recovery_until_scn_ = other.recovery_until_scn_;
+    compatible_version_ = other.compatible_version_;
+    is_creating_standby_ = other.is_creating_standby_;
+    log_restore_source_ = other.log_restore_source_;
+    is_tmp_tenant_for_recover_ = other.is_tmp_tenant_for_recover_;
+  }
+  return ret;
+}
 void ObCreateTenantArg::reset()
 {
   ObDDLArg::reset();

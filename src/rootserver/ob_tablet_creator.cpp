@@ -273,7 +273,7 @@ int ObTabletCreator::add_create_tablet_arg(const ObTabletCreatorArg &arg)
   }
 
   if (OB_FAIL(ret)) {
-  } else if (batch_arg->arg_.get_serialize_size() > BATCH_ARG_SIZE) {
+  } else if (!common::is_bootstrap_in_single_mode() && batch_arg->arg_.get_serialize_size() > BATCH_ARG_SIZE) {
     LOG_INFO("batch arg is more than 1M", KR(ret), K(batch_arg->arg_.tablets_.count()), K(batch_arg->arg_));
     void *arg_buf = allocator_.alloc(sizeof(ObBatchCreateTabletHelper));
     ObBatchCreateTabletHelper *new_arg = NULL;

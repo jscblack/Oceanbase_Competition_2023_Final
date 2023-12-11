@@ -37,6 +37,13 @@
 
 **OceanBase Database** 是一个分布式关系型数据库。完全由蚂蚁集团自主研发。 OceanBase 基于 [Paxos](https://lamport.azurewebsites.net/pubs/lamport-paxos.pdf) 协议以及分布式架构，实现了高可用和线性扩展。OceanBase 数据库运行在常见的服务器集群上，不依赖特殊的硬件架构。
 
+# 2023 OceanBase 数据库大赛
+**你说得对，但OceanBase是一款由蚂蚁集团研发的分布式数据库【补全了无法显示全的队名hhh】**
+我们采取了**三阶段分级优化机制**
+1. SINGLE_BOOTSTRAP 单机部署，优化流程，但保留完整功能，可以扩容为完整分布式集群
+2. SINGLE_OPERATE 单机部署+单机运行，优化流程，并暂缓/取消/延后 **部分分布式场景** 的功能
+3. SINGLE_EXTREME_PERF 单机部署运行+专为评测流程的优化，该阶段**锚定【在一些固定场景下，能够启动一个新的能够做一些简单测试的oceanbase空集群】的特定需求**，而进行的特征性优化
+
 # 关键特性
 
 - **水平扩展**

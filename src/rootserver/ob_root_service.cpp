@@ -1047,6 +1047,8 @@ int ObRootService::start_service()
   start_service_time_ = ObTimeUtility::current_time();
   ROOTSERVICE_EVENT_ADD("root_service", "start_rootservice", K_(self_addr));
   FLOG_INFO("[ROOTSERVICE_NOTICE] start to start rootservice", K_(start_service_time));
+  const bool single_bootstrap_ = common::is_bootstrap_in_single_mode();
+  FLOG_INFO("[ROOTSERVICE_NOTICE] check bootstrap status", K_(single_bootstrap));
   if (!inited_) {
     ret = OB_NOT_INIT;
     FLOG_WARN("rootservice not inited", KR(ret));
@@ -1082,9 +1084,10 @@ int ObRootService::start_service()
       FLOG_WARN("lst_operator set as rs leader failed", KR(ret));
     } else if (OB_FAIL(rs_status_.set_rs_status(status::IN_SERVICE))) {
       FLOG_WARN("fail to set rs status", KR(ret));
-    } else if (OB_FAIL(schedule_refresh_server_timer_task(0))) {
+    } else if (!single_bootstrap_ && OB_FAIL(schedule_refresh_server_timer_task(0))) {
       FLOG_WARN("failed to schedule refresh_server task", KR(ret));
-    } else if (OB_FAIL(schedule_restart_timer_task(0))) {
+    } else if (!single_bootstrap_ && OB_FAIL(schedule_restart_timer_task(0))) {
+      // 单机未初始化执行restart毫无意义
       FLOG_WARN("failed to schedule restart task", KR(ret));
     } else if (OB_FAIL(schema_service_->get_ddl_epoch_mgr().remove_all_ddl_epoch())) {
       FLOG_WARN("fail to remove ddl epoch", KR(ret));
@@ -1706,6 +1709,24 @@ int ObRootService::submit_reload_unit_manager_task()
   return ret;
 }
 
+int ObRootService::submit_create_tenant_task(const obrpc::ObCreateTenantArg &arg, obrpc::UInt64 &tenant_id){
+  // make create tenant a async task
+  int ret = OB_SUCCESS;
+  if (OB_UNLIKELY(!inited_)) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", K(ret));
+  } else {
+    ObCurTraceId::TraceId *cur_trace_id = ObCurTraceId::get_trace_id();
+    ObCreateTenantTask task(*this, arg, tenant_id, *cur_trace_id);
+    if (OB_FAIL(task_queue_.add_async_task(task))) {
+      LOG_WARN("inner queue push reload_unit task failed", K(ret));
+    } else {
+      LOG_INFO("submit create tenant task success", K(ret));
+    }
+  }
+  return ret;
+}
+
 int ObRootService::schedule_restart_timer_task(const int64_t delay)
 {
   int ret = OB_SUCCESS;
@@ -1745,6 +1766,10 @@ int ObRootService::schedule_refresh_server_timer_task(const int64_t delay)
 int ObRootService::update_rslist()
 {
   int ret = OB_SUCCESS;
+  if(common::is_bootstrap_in_single_mode()){
+    LOG_INFO("single bootstrap no need to broadcast");
+    return ret;
+  }
   ObUpdateRsListTask task;
   ObTimeoutCtx ctx;
   ctx.set_timeout(config_->rpc_timeout);
@@ -2728,6 +2753,12 @@ int ObRootService::create_tenant(const ObCreateTenantArg &arg, UInt64 &tenant_id
   } else {}
   LOG_INFO("finish create tenant", KR(ret), K(tenant_id), K(arg), "timeout_ts", THIS_WORKER.get_timeout_ts());
   return ret;
+}
+
+int ObRootService::create_tenant_async(const ObCreateTenantArg &arg, UInt64 &tenant_id)
+{
+  // create async task here
+  return submit_create_tenant_task(arg, tenant_id);
 }
 
 int ObRootService::create_tenant_end(const ObCreateTenantEndArg &arg)
@@ -9119,6 +9150,191 @@ ObAsyncTask *ObRootService::ObReloadUnitManagerTask::deep_copy(char *buf, const 
   return task;
 }
 
+//////////////ObCreateTenantTask
+ObRootService::ObCreateTenantTask::ObCreateTenantTask(ObRootService &root_service, 
+    const obrpc::ObCreateTenantArg &arg, 
+    obrpc::UInt64 &tenant_id,
+    ObCurTraceId::TraceId trace_id)
+: ObAsyncTimerTask(root_service.task_queue_),
+    root_service_(root_service)
+{
+  // must deep copy obrpc::ObCreateTenantArg here
+  arg_.deepcopy_assign(arg);
+  tenant_id_ = tenant_id;
+  trace_id_ = trace_id;
+  set_retry_times(INT64_MAX); // retry until success
+  LOG_INFO("init ObCreateTenantTask", K(arg_));
+}
+
+int ObRootService::ObCreateTenantTask::wait_schema_refreshed_inner_(const uint64_t tenant_id)
+{
+  int ret = OB_SUCCESS;
+  int64_t start_ts = ObTimeUtility::current_time();
+  bool is_dropped = false;
+  const uint64_t user_tenant_id = gen_user_tenant_id(tenant_id);
+  const uint64_t meta_tenant_id = gen_meta_tenant_id(tenant_id);
+  int64_t user_schema_version = OB_INVALID_VERSION;
+  int64_t meta_schema_version = OB_INVALID_VERSION;
+  while (OB_SUCC(ret)) {
+    if (THIS_WORKER.is_timeout()) {
+      ret = OB_TIMEOUT;
+      LOG_WARN("failed to wait user ls valid", KR(ret));
+    } else if (OB_FAIL(GSCHEMASERVICE.check_if_tenant_has_been_dropped(meta_tenant_id, is_dropped))) {
+      LOG_WARN("meta tenant has been dropped", KR(ret), K(meta_tenant_id));
+    } else if (is_dropped) {
+      ret = OB_TENANT_HAS_BEEN_DROPPED;
+      LOG_WARN("meta tenant has been dropped", KR(ret), K(meta_tenant_id));
+    } else if (OB_FAIL(GSCHEMASERVICE.check_if_tenant_has_been_dropped(user_tenant_id, is_dropped))) {
+      LOG_WARN("user tenant has been dropped", KR(ret), K(user_tenant_id));
+    } else if (is_dropped) {
+      ret = OB_TENANT_HAS_BEEN_DROPPED;
+      LOG_WARN("user tenant has been dropped", KR(ret), K(user_tenant_id));
+    } else {
+      int tmp_ret = OB_SUCCESS;
+      if (OB_TMP_FAIL(GSCHEMASERVICE.get_tenant_refreshed_schema_version(
+          meta_tenant_id, meta_schema_version))) {
+        if (OB_ENTRY_NOT_EXIST != tmp_ret) {
+          ret = tmp_ret;
+          LOG_WARN("get refreshed schema version failed", KR(ret), K(meta_tenant_id));
+        }
+      } else if (OB_TMP_FAIL(GSCHEMASERVICE.get_tenant_refreshed_schema_version(
+          user_tenant_id, user_schema_version))) {
+        if (OB_ENTRY_NOT_EXIST != tmp_ret) {
+          ret = tmp_ret;
+          LOG_WARN("get refreshed schema version failed", KR(ret), K(user_tenant_id));
+        }
+      }
+      if (OB_FAIL(ret)) {
+      } else if (ObSchemaService::is_formal_version(meta_schema_version)
+                 && ObSchemaService::is_formal_version(user_schema_version)) {
+        break;
+      } else {
+        const int64_t INTERVAL = common::is_bootstrap_in_single_mode()?100 * 1000L:500 * 1000L; // 100ms/500ms
+        LOG_INFO("wait schema refreshed", K(tenant_id), K(meta_schema_version), K(user_schema_version));
+        ob_usleep(INTERVAL);
+      }
+    }
+  }
+  LOG_INFO("[CREATE TENANT] wait schema refreshed", KR(ret), K(tenant_id),
+           "cost", ObTimeUtility::current_time() - start_ts);
+  return ret;
+}
+
+int ObRootService::ObCreateTenantTask::wait_user_ls_valid_inner_(const uint64_t tenant_id)
+{
+  int ret = OB_SUCCESS;
+  int64_t start_ts = ObTimeUtility::current_time();
+  if (OB_ISNULL(GCTX.sql_proxy_)) {
+    ret = OB_ERR_UNEXPECTED;
+    LOG_WARN("sql_proxy is null", KR(ret), K(tenant_id));
+  } else if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id)) {
+    ret = OB_INVALID_ARGUMENT;
+    LOG_WARN("tenant id is invalid", KR(ret), K(tenant_id));
+  } else {
+    bool user_ls_valid = false;
+    ObLSStatusOperator status_op;
+    ObLSStatusInfoArray ls_array;
+    ObLSID ls_id;
+    //wait user ls create success
+    while (OB_SUCC(ret) && !user_ls_valid) {
+      ls_array.reset();
+      if (THIS_WORKER.is_timeout()) {
+        ret = OB_TIMEOUT;
+        LOG_WARN("failed to wait user ls valid", KR(ret));
+      } else if (OB_FAIL(status_op.get_all_ls_status_by_order(tenant_id, ls_array, *GCTX.sql_proxy_))) {
+        LOG_WARN("failed to get ls status", KR(ret), K(tenant_id));
+      } else {
+        for (int64_t i = 0; OB_SUCC(ret) && i < ls_array.count() && !user_ls_valid; ++i) {
+          const ObLSStatusInfo &ls_status = ls_array.at(i);
+          if (!ls_status.ls_id_.is_sys_ls() && ls_status.ls_is_normal()) {
+            user_ls_valid = true;
+            ls_id = ls_status.ls_id_;
+          }
+        }//end for
+      }
+      if (OB_FAIL(ret)) {
+      } else if (user_ls_valid) {
+      } else {
+        const int64_t INTERVAL = common::is_bootstrap_in_single_mode()?100 * 1000L:500 * 1000L; // 100ms/500ms
+        LOG_INFO("wait user ls valid", KR(ret), K(tenant_id));
+        ob_usleep(INTERVAL);
+      }
+    }// end while
+    LOG_INFO("[CREATE TENANT] wait user ls created", KR(ret), K(tenant_id),
+             "cost", ObTimeUtility::current_time() - start_ts);
+
+    if (OB_SUCC(ret)) {
+      start_ts = ObTimeUtility::current_time();
+      //wait user ls election
+      if (OB_ISNULL(GCTX.lst_operator_)) {
+        ret = OB_ERR_UNEXPECTED;
+        LOG_WARN("ls operator is null", KR(ret));
+      } else {
+        volatile bool stopped = false;
+        share::ObLSLeaderElectionWaiter ls_leader_waiter(*GCTX.lst_operator_, stopped);
+        const int64_t timeout = THIS_WORKER.get_timeout_remain();
+        if (OB_FAIL(ls_leader_waiter.wait(tenant_id, ls_id, timeout))) {
+          LOG_WARN("fail to wait election leader", KR(ret), K(tenant_id), K(ls_id), K(timeout));
+        }
+      }
+      LOG_INFO("[CREATE TENANT] wait user ls election result", KR(ret), K(tenant_id),
+               "cost", ObTimeUtility::current_time() - start_ts);
+    }
+  }
+  return ret;
+}
+
+int ObRootService::ObCreateTenantTask::process()
+{
+  // do create tenant here, and not wait out side
+  ObCurTraceId::set(trace_id_);
+  LOG_INFO("receive create tenant arg", K(arg_), "timeout_ts", THIS_WORKER.get_timeout_ts());
+  int ret = OB_SUCCESS;
+  int tmp_ret = OB_SUCCESS;
+  const ObString &tenant_name = arg_.tenant_schema_.get_tenant_name_str();
+  // when recovering table, it needs to create tmp tenant
+  const bool tmp_tenant = arg_.is_tmp_tenant_for_recover_;
+  if (!root_service_.inited_) {
+    ret = OB_NOT_INIT;
+    LOG_WARN("not init", KR(ret));
+  } else if (!tmp_tenant && OB_FAIL(ObResolverUtils::check_not_supported_tenant_name(tenant_name))) {
+    LOG_WARN("unsupported tenant name", KR(ret), K(tenant_name));
+  } else if (OB_FAIL(root_service_.ddl_service_.create_tenant(arg_, tenant_id_))) {
+    LOG_WARN("fail to create tenant", KR(ret), K(arg_));
+    if (OB_TMP_FAIL(root_service_.submit_reload_unit_manager_task())) {
+      if (OB_CANCELED != tmp_ret) {
+        LOG_ERROR("fail to reload unit_mgr, please try 'alter system reload unit'", KR(ret), KR(tmp_ret));
+      }
+    }
+  } else {}
+  LOG_INFO("finish create tenant, rpc part", KR(ret), K(tenant_id_), K(arg_), "timeout_ts", THIS_WORKER.get_timeout_ts());
+  if (OB_INVALID_ID != tenant_id_ && !common::is_single_extreme_perf()/*if in extreme perf mode, use natural overlap, instead of wait*/) {
+    int tmp_ret = OB_SUCCESS; // try refresh schema and wait ls valid
+    if (OB_TMP_FAIL(wait_schema_refreshed_inner_(tenant_id_))) {
+      LOG_WARN("fail to wait schema refreshed", KR(tmp_ret), K(tenant_id_));
+    } else if (OB_TMP_FAIL(wait_schema_refreshed_inner_(tenant_id_))) {
+      LOG_WARN("failed to wait user ls valid, but ignore", KR(tmp_ret), K(tenant_id_));
+    }
+  }
+  if(OB_SUCC(ret)){
+    GCTX.status_ = observer::SS_SERVING;
+  }
+  LOG_INFO("finish create tenant, after wait", KR(ret), K(tenant_id_));
+  return ret;
+}
+
+ObAsyncTask *ObRootService::ObCreateTenantTask::deep_copy(char *buf, const int64_t buf_size) const
+{
+  ObCreateTenantTask *task = NULL;
+  if (NULL == buf || buf_size < static_cast<int64_t>(sizeof(*this))) {
+    LOG_WARN_RET(OB_BUF_NOT_ENOUGH, "buffer not large enough", K(buf_size), KP(buf));
+  } else {
+    const obrpc::ObCreateTenantArg &create_tenant_arg = arg_;
+    task = new (buf) ObCreateTenantTask(root_service_, create_tenant_arg, const_cast<obrpc::UInt64&>(tenant_id_), trace_id_);
+  }
+  return task;
+}
+//////////////ObCreateTenantTask--END
 ObRootService::ObLoadDDLTask::ObLoadDDLTask(ObRootService &root_service)
   : ObAsyncTimerTask(root_service.task_queue_), root_service_(root_service)
 {

@@ -39,7 +39,7 @@ namespace share {
 class ObSyslogPerErrLimiter : public common::ObISyslogRateLimiter
 {
 public:
-  const static int64_t REFRESH_INTERVAL_US = 1000000;
+  const static int64_t REFRESH_INTERVAL_US = 1 * 1000 * 1000;
   ObSyslogPerErrLimiter() : inited_(false), refresh_thread_(*this)
   {
     refresh_thread_.set_thread_count(1);

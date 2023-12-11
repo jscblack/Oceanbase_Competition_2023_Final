@@ -591,6 +591,7 @@ int ObPlanCache::get_plan(common::ObIAllocator &allocator,
         MEMCPY(pc_ctx.sql_ctx_.sql_id_,
                plan->stat_.sql_id_.ptr(),
                plan->stat_.sql_id_.length());
+        LOG_INFO("get_plan middle1",K(ret), K(plan->get_constructed_sql()));
         if (GCONF.enable_perf_event) {
           uint64_t tenant_id = pc_ctx.sql_ctx_.session_info_->get_effective_tenant_id();
           bool read_only = false;
@@ -608,6 +609,7 @@ int ObPlanCache::get_plan(common::ObIAllocator &allocator,
     co_mgr_.free(guard.cache_obj_, guard.ref_handle_);
     guard.cache_obj_ = NULL;
   }
+  LOG_INFO("get_plan middle2",K(ret));
   return ret;
 }
 
@@ -754,6 +756,7 @@ int ObPlanCache::construct_fast_parser_result(common::ObIAllocator &allocator,
       }
     }
   }
+  LOG_INFO("construct_fast_parser_result",K(raw_sql),K(fp_result.pc_key_));
   return ret;
 }
 
@@ -937,7 +940,7 @@ bool ObPlanCache::can_do_insert_batch_opt(ObPlanCacheCtx &pc_ctx)
     if (!pc_ctx.sql_ctx_.is_batch_params_execute() &&
         GCONF._sql_insert_multi_values_split_opt &&
         !pc_ctx.sql_ctx_.get_enable_user_defined_rewrite() &&
-        !session_info->is_inner() &&
+        /*!session_info->is_inner() &&*/
         OB_BATCHED_MULTI_STMT_ROLLBACK != session_info->get_retry_info().get_last_query_retry_err()) {
       bret = true;
     } else {
@@ -1030,6 +1033,7 @@ int ObPlanCache::add_plan(ObPhysicalPlan *plan, ObPlanCacheCtx &pc_ctx)
   int ret = OB_SUCCESS;
   FLTSpanGuard(pc_add_plan);
   ObGlobalReqTimeService::check_req_timeinfo();
+  // always add!
   if (OB_ISNULL(plan)) {
     ret = OB_INVALID_ARGUMENT;
     SQL_PC_LOG(WARN, "invalid physical plan", K(ret));
@@ -1051,6 +1055,7 @@ int ObPlanCache::add_plan(ObPhysicalPlan *plan, ObPlanCacheCtx &pc_ctx)
     }
   } else {
     (void)inc_mem_used(plan->get_mem_size());
+    LOG_INFO("plan added", K(pc_ctx.raw_sql_));
   }
 
   return ret;

@@ -261,6 +261,26 @@ public:
     DISALLOW_COPY_AND_ASSIGN(ObReloadUnitManagerTask);
   };
 
+  class ObCreateTenantTask : public common::ObAsyncTimerTask
+  {
+  public:
+    explicit ObCreateTenantTask(ObRootService &root_service, const obrpc::ObCreateTenantArg &arg, obrpc::UInt64 &tenant_id, ObCurTraceId::TraceId trace_id);
+    virtual ~ObCreateTenantTask() {}
+  public:
+    // interface of AsyncTask
+    virtual int process() override;
+    virtual int64_t get_deep_copy_size() const override { return sizeof(*this); }
+    virtual ObAsyncTask *deep_copy(char *buf, const int64_t buf_size) const override;
+  private:
+    int wait_schema_refreshed_inner_(const uint64_t tenant_id);
+    int wait_user_ls_valid_inner_(const uint64_t tenant_id);
+    ObRootService &root_service_;
+    obrpc::ObCreateTenantArg arg_;
+    obrpc::UInt64 tenant_id_;
+    ObCurTraceId::TraceId trace_id_;
+    DISALLOW_COPY_AND_ASSIGN(ObCreateTenantTask);
+  };
+
   class ObLoadDDLTask : public common::ObAsyncTimerTask
   {
   public:
@@ -465,6 +485,7 @@ public:
   int merge_resource_pool(const obrpc::ObMergeResourcePoolArg &arg);
   int alter_resource_tenant(const obrpc::ObAlterResourceTenantArg &arg);
   int create_tenant(const obrpc::ObCreateTenantArg &arg, obrpc::UInt64 &tenant_id);
+  int create_tenant_async(const obrpc::ObCreateTenantArg &arg, obrpc::UInt64 &tenant_id);
   int create_tenant_end(const obrpc::ObCreateTenantEndArg &arg);
   int commit_alter_tenant_locality(const rootserver::ObCommitAlterTenantLocalityArg &arg);
   int drop_tenant(const obrpc::ObDropTenantArg &arg);
@@ -737,6 +758,7 @@ public:
   int submit_offline_server_task(const common::ObAddr &server);
   int submit_report_core_table_replica_task();
   int submit_reload_unit_manager_task();
+  int submit_create_tenant_task(const obrpc::ObCreateTenantArg &arg, obrpc::UInt64 &tenant_id);
   int report_replica();
   int report_single_replica(const int64_t tenant_id, const share::ObLSID &ls_id);
   // @see RsListChangeCb

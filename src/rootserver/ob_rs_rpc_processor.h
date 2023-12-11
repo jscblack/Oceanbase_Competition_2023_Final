@@ -60,7 +60,8 @@ inline bool is_allow_when_create_tenant(const obrpc::ObRpcPacketCode pcode)
       || obrpc::OB_MODIFY_TENANT == pcode
       || obrpc::OB_LOCK_TENANT == pcode
       || obrpc::OB_COMMIT_ALTER_TENANT_LOCALITY == pcode
-      || obrpc::OB_CREATE_TENANT_END == pcode) {
+      || obrpc::OB_CREATE_TENANT_END == pcode
+      || obrpc::OB_CREATE_TENANT_ASYNC == pcode) {
     bret = true;
   }
   return bret;
@@ -327,6 +328,7 @@ DEFINE_RS_RPC_PROCESSOR(obrpc::OB_START_REDEF_TABLE, ObRpcStartRedefTableP, star
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_CREATE_HIDDEN_TABLE, ObRpcCreateHiddenTableP, create_hidden_table(arg_, result_));
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_COMMIT_ALTER_TENANT_LOCALITY, ObRpcCommitAlterTenantLocalityP, commit_alter_tenant_locality(arg_));
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_CREATE_TENANT, ObRpcCreateTenantP, create_tenant(arg_, result_));
+DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_CREATE_TENANT_ASYNC, ObRpcCreateTenantAsyncP, create_tenant_async(arg_, result_));
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_CREATE_TENANT_END, ObRpcCreateTenantEndP, create_tenant_end(arg_));
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_DROP_TENANT, ObRpcDropTenantP, drop_tenant(arg_));
 DEFINE_DDL_RS_RPC_PROCESSOR(obrpc::OB_MODIFY_TENANT, ObRpcModifyTenantP, modify_tenant(arg_));

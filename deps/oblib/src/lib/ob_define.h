@@ -400,7 +400,7 @@ const int64_t OB_PC_NOT_PARAM_COUNT = 8;
 const int64_t OB_PC_SPECIAL_PARAM_COUNT = 16;
 const int64_t OB_PC_RAW_PARAM_COUNT = 128;
 const int64_t OB_PLAN_CACHE_BUCKET_NUMBER = 49157;// calculated by cal_next_prime()
-const int64_t OB_PLAN_CACHE_PERCENTAGE = 5;
+const int64_t OB_PLAN_CACHE_PERCENTAGE = 50;
 const int64_t OB_PLAN_CACHE_EVICT_HIGH_PERCENTAGE = 90;
 const int64_t OB_PLAN_CACHE_EVICT_LOW_PERCENTAGE = 50;
 const int64_t OB_PC_WEIGHT_NUMERATOR = 1000000000;
@@ -1574,7 +1574,16 @@ OB_INLINE uint64_t get_private_table_exec_tenant_id(const uint64_t tenant_id)
   } else if (is_meta_tenant(tenant_id)) {
     ret_tenant_id = OB_SYS_TENANT_ID;
   } else {
-    ret_tenant_id = gen_meta_tenant_id(tenant_id);
+    const char *env1_= getenv("SINGLE_BOOTSTRAP");
+    const char *env2_= getenv("SINGLE_OPERATE");
+    if(env1_ && 0 == strcmp("true", env1_)){
+      ret_tenant_id = OB_SYS_TENANT_ID;// also use sys tenant
+    } else if(env2_ && 0 == strcmp("true", env2_)){
+      ret_tenant_id = OB_SYS_TENANT_ID;// also use sys tenant
+    } else{
+      ret_tenant_id = gen_meta_tenant_id(tenant_id);
+    }
+    // ret_tenant_id = gen_meta_tenant_id(tenant_id);
   }
   return ret_tenant_id;
 }

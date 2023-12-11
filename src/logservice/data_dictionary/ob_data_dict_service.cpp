@@ -39,7 +39,7 @@ using namespace storage;
 namespace datadict
 {
 
-const int64_t ObDataDictService::TIMER_TASK_INTERVAL = 1 * _SEC_; // schedule timer task with interval 5s
+const int64_t ObDataDictService::TIMER_TASK_INTERVAL = 5 * _SEC_; // schedule timer task with interval 5s
 const int64_t ObDataDictService::PRINT_DETAIL_INTERVAL = 60 * _SEC_;
 const int64_t ObDataDictService::SCHEMA_OP_TIMEOUT = 2 * _SEC_;
 const int64_t ObDataDictService::DEFAULT_REPORT_TIMEOUT = 10 * _MIN_;
@@ -170,7 +170,7 @@ void ObDataDictService::runTimerTask()
 {
   ObCurTraceId::init(GCONF.self_addr_);
 
-  if (IS_INIT) {
+  if (IS_INIT && !common::is_bootstrap_in_single_mode()) {
     refresh_config_();
     bool is_leader = ATOMIC_LOAD(&is_leader_);
     const int64_t start_time = ObClockGenerator::getClock();

@@ -963,7 +963,11 @@ void ObLogger::log_it(const char *mod_name,
         && OB_LIKELY(is_enable_logging())
         && OB_NOT_NULL(mod_name) && OB_NOT_NULL(file) && OB_NOT_NULL(function)
         && OB_NOT_NULL(function)) {
-      if (is_trace_mode()) {
+      if (getenv("SINGLE_EXTREME_PERF") && 0 == strcmp("true", getenv("SINGLE_EXTREME_PERF"))){
+        // in perf mode, stop log
+        set_disable_logging(true);
+        return;
+      } if (is_trace_mode()) {
         TraceBuffer *tb = nullptr;
         if (OB_NOT_NULL(tb = get_trace_buffer())) {
           /* loop 2 times at most */

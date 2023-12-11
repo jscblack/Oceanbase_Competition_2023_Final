@@ -836,6 +836,7 @@ int ObTenant::create_tenant_module()
   ObTenantSwitchGuard guard(this);
   // set tenant init param
   FLOG_INFO("begin create mtl module>>>>", K(tenant_id), K(MTL_ID()));
+  const int64_t start_time = ObTimeUtility::current_time();
 
   if (OB_FAIL(ObTenantBase::create_mtl_module())) {
     LOG_ERROR("create mtl module failed", K(tenant_id), K(ret));
@@ -852,7 +853,7 @@ int ObTenant::create_tenant_module()
   }
 
 
-  FLOG_INFO("finish create mtl module>>>>", K(tenant_id), K(MTL_ID()), K(ret));
+  FLOG_INFO("finish create mtl module>>>>", K(tenant_id), K(MTL_ID()), K(ret),"cost", ObTimeUtility::current_time() - start_time);
 
   if (OB_FAIL(ret)) {
     ObTenantBase::stop_mtl_module();

@@ -159,6 +159,7 @@ int ObLSLeaderElectionWaiter::wait_elect_leader(
     common::ObAddr &leader)
 {
   int ret = OB_SUCCESS;
+  const bool single_bootstrap = common::is_bootstrap_in_single_mode();
   ObLSInfo ls_info;
   const ObLSReplica *leader_replica = NULL;
   if (OB_UNLIKELY(OB_INVALID_ID == tenant_id
@@ -201,6 +202,9 @@ int ObLSLeaderElectionWaiter::wait_elect_leader(
         }
       }
       sleep_interval = std::min(sleep_interval * 2, check_interval);
+      if(single_bootstrap){
+        sleep_interval=std::min(10L * 1000L, sleep_interval);
+      }
     }
     if (stop_ && OB_SUCC(ret)) {
       ret = OB_CANCELED;

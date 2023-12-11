@@ -177,11 +177,13 @@ ObAllTenantInfo& ObAllTenantInfo::operator= (const ObAllTenantInfo &other)
 ////////////ObAllTenantInfoProxy
 int ObAllTenantInfoProxy::init_tenant_info(
     const ObAllTenantInfo &tenant_info,
-    ObISQLClient *proxy)
+    ObISQLClient *proxy,
+    const uint64_t exec_tenant_id)
 {
   int64_t begin_time = ObTimeUtility::current_time();
   int ret = OB_SUCCESS;
-  const uint64_t exec_tenant_id = gen_meta_tenant_id(tenant_info.get_tenant_id());
+  LOG_INFO("init_tenant_info", K(tenant_info),K(exec_tenant_id));
+  // const uint64_t exec_tenant_id = gen_meta_tenant_id(tenant_info.get_tenant_id());
   ObSqlString sql;
   int64_t affected_rows = 0;
   ObTimeoutCtx ctx;
@@ -363,7 +365,11 @@ int ObAllTenantInfoProxy::load_tenant_info(const uint64_t tenant_id,
     if (OB_FAIL(tenant_info.init(tenant_id, share::PRIMARY_TENANT_ROLE))) {
       LOG_WARN("failed to init tenant info", KR(ret), K(tenant_id));
     }
-  } else {
+  } /*else if(tenant_id==1002){
+    if (OB_FAIL(tenant_info.init(tenant_id, share::PRIMARY_TENANT_ROLE))) {
+      LOG_WARN("failed to init tenant info", KR(ret), K(tenant_id));
+    }
+  }*/ else {
     if (OB_FAIL(load_pure_tenant_info_(tenant_id, proxy, for_update, ora_rowscn, tenant_info))) {
       LOG_WARN("failed to load purge tenant info", KR(ret), K(tenant_id), K(for_update));
     } else if (DEFAULT_MAX_LS_ID == tenant_info.get_max_ls_id().id()) {
@@ -397,7 +403,14 @@ int ObAllTenantInfoProxy::load_pure_tenant_info_(const uint64_t tenant_id,
     LOG_WARN("invalid argument", KR(ret), K(tenant_id));
   } else {
     ObSqlString sql;
-    uint64_t exec_tenant_id = gen_meta_tenant_id(tenant_id);
+    // uint64_t exec_tenant_id = gen_meta_tenant_id(tenant_id);
+    uint64_t exec_tenant_id = OB_INVALID_TENANT_ID;
+    if(common::is_bootstrap_in_single_mode()||common::is_operate_in_single_mode()){
+      // tenant info during bootstrap is stored in sys ls meta
+      exec_tenant_id = OB_SYS_TENANT_ID;
+    } else {
+      exec_tenant_id = gen_meta_tenant_id(tenant_id);
+    }
     if (OB_FAIL(rootserver::ObRootUtils::get_rs_default_timeout_ctx(ctx))) {
       LOG_WARN("fail to get timeout ctx", KR(ret), K(ctx));
     } else if (OB_FAIL(sql.assign_fmt("select ORA_ROWSCN, * from %s where tenant_id = %lu ",
@@ -430,7 +443,14 @@ int ObAllTenantInfoProxy::update_tenant_recovery_status_in_trans(
     const SCN &replay_scn, const SCN &readable_scn)
 {
   int ret = OB_SUCCESS;
-  const uint64_t exec_tenant_id = gen_meta_tenant_id(tenant_id);
+  // const uint64_t exec_tenant_id = gen_meta_tenant_id(tenant_id);
+  uint64_t exec_tenant_id = OB_INVALID_TENANT_ID;
+  if(common::is_bootstrap_in_single_mode()||common::is_operate_in_single_mode()){
+    // tenant info during bootstrap is stored in sys ls meta
+    exec_tenant_id = OB_SYS_TENANT_ID;
+  } else {
+    exec_tenant_id = gen_meta_tenant_id(tenant_id);
+  }
   ObSqlString sql;
   int64_t affected_rows = 0;
   if (OB_UNLIKELY(OB_INVALID_TENANT_ID == tenant_id ||
@@ -540,7 +560,14 @@ int ObAllTenantInfoProxy::update_tenant_max_ls_id(
     ObMySQLTransaction &trans, const bool for_upgrade)
 {
   int ret = OB_SUCCESS;
-  const uint64_t exec_tenant_id = gen_meta_tenant_id(tenant_id);
+  // const uint64_t exec_tenant_id = gen_meta_tenant_id(tenant_id);
+  uint64_t exec_tenant_id = OB_INVALID_TENANT_ID;
+  if(common::is_bootstrap_in_single_mode()||common::is_operate_in_single_mode()){
+    // tenant info during bootstrap is stored in sys ls meta
+    exec_tenant_id = OB_SYS_TENANT_ID;
+  } else {
+    exec_tenant_id = gen_meta_tenant_id(tenant_id);
+  }
   ObSqlString sql;
   int64_t affected_rows = 0;
   int64_t ora_rowscn = 0;//no used
@@ -588,7 +615,14 @@ int ObAllTenantInfoProxy::update_tenant_role(
 {
   int64_t begin_time = ObTimeUtility::current_time();
   int ret = OB_SUCCESS;
-  const uint64_t exec_tenant_id = gen_meta_tenant_id(tenant_id);
+  // const uint64_t exec_tenant_id = gen_meta_tenant_id(tenant_id);
+  uint64_t exec_tenant_id = OB_INVALID_TENANT_ID;
+  if(common::is_bootstrap_in_single_mode()||common::is_operate_in_single_mode()){
+    // tenant info during bootstrap is stored in sys ls meta
+    exec_tenant_id = OB_SYS_TENANT_ID;
+  } else {
+    exec_tenant_id = gen_meta_tenant_id(tenant_id);
+  }
   ObSqlString sql;
   int64_t affected_rows = 0;
   ObTimeoutCtx ctx;
@@ -646,7 +680,14 @@ int ObAllTenantInfoProxy::update_tenant_switchover_status(
 {
   int64_t begin_time = ObTimeUtility::current_time();
   int ret = OB_SUCCESS;
-  const uint64_t exec_tenant_id = gen_meta_tenant_id(tenant_id);
+  // const uint64_t exec_tenant_id = gen_meta_tenant_id(tenant_id);
+  uint64_t exec_tenant_id = OB_INVALID_TENANT_ID;
+  if(common::is_bootstrap_in_single_mode()||common::is_operate_in_single_mode()){
+    // tenant info during bootstrap is stored in sys ls meta
+    exec_tenant_id = OB_SYS_TENANT_ID;
+  } else {
+    exec_tenant_id = gen_meta_tenant_id(tenant_id);
+  }
   ObSqlString sql;
   int64_t affected_rows = 0;
   ObTimeoutCtx ctx;
@@ -698,7 +739,14 @@ int ObAllTenantInfoProxy::update_tenant_recovery_until_scn(
 
   int64_t begin_time = ObTimeUtility::current_time();
   int ret = OB_SUCCESS;
-  const uint64_t exec_tenant_id = gen_meta_tenant_id(tenant_id);
+  // const uint64_t exec_tenant_id = gen_meta_tenant_id(tenant_id);
+  uint64_t exec_tenant_id = OB_INVALID_TENANT_ID;
+  if(common::is_bootstrap_in_single_mode()||common::is_operate_in_single_mode()){
+    // tenant info during bootstrap is stored in sys ls meta
+    exec_tenant_id = OB_SYS_TENANT_ID;
+  } else {
+    exec_tenant_id = gen_meta_tenant_id(tenant_id);
+  }
   ObSqlString sql;
   int64_t affected_rows = 0;
   ObTimeoutCtx ctx;
@@ -764,7 +812,14 @@ int ObAllTenantInfoProxy::update_tenant_status(
 {
   int64_t begin_time = ObTimeUtility::current_time();
   int ret = OB_SUCCESS;
-  const uint64_t exec_tenant_id = gen_meta_tenant_id(tenant_id);
+  // const uint64_t exec_tenant_id = gen_meta_tenant_id(tenant_id);
+  uint64_t exec_tenant_id = OB_INVALID_TENANT_ID;
+  if(common::is_bootstrap_in_single_mode()||common::is_operate_in_single_mode()){
+    // tenant info during bootstrap is stored in sys ls meta
+    exec_tenant_id = OB_SYS_TENANT_ID;
+  } else {
+    exec_tenant_id = gen_meta_tenant_id(tenant_id);
+  }
   ObSqlString sql;
   int64_t affected_rows = 0;
   ObTimeoutCtx ctx;
@@ -882,7 +937,14 @@ int ObAllTenantInfoProxy::update_tenant_log_mode(
     const ObArchiveMode &new_log_mode)
 {
   int ret = OB_SUCCESS;
-  const uint64_t exec_tenant_id = gen_meta_tenant_id(tenant_id);
+  // const uint64_t exec_tenant_id = gen_meta_tenant_id(tenant_id);
+  uint64_t exec_tenant_id = OB_INVALID_TENANT_ID;
+  if(common::is_bootstrap_in_single_mode()||common::is_operate_in_single_mode()){
+    // tenant info during bootstrap is stored in sys ls meta
+    exec_tenant_id = OB_SYS_TENANT_ID;
+  } else {
+    exec_tenant_id = gen_meta_tenant_id(tenant_id);
+  }
   ObSqlString sql;
   int64_t affected_rows = 0;
   ObTimeoutCtx ctx;
